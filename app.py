@@ -356,218 +356,529 @@ INDEX_HTML = r'''<!doctype html>
 <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
 <title>图片对比标注工具</title>
 <style>
-:root { --bg:#111827; --panel:#1f2937; --text:#f9fafb; --muted:#9ca3af; --green:#22c55e; --red:#ef4444; --blue:#3b82f6; }
-* { box-sizing:border-box; }
-body { margin:0; font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; background:var(--bg); color:var(--text); }
-.app { display:flex; height:100vh; }
-.sidebar { width:360px; background:#0f172a; padding:16px; border-right:1px solid #1e293b; overflow:auto; }
-.main { flex:1; display:flex; flex-direction:column; min-width:0; }
-.card { background:var(--panel); border:1px solid #334155; border-radius:12px; padding:12px; margin-bottom:12px; }
-.title { font-size:18px; font-weight:700; }
-.hint { color:var(--muted); font-size:12px; }
-.row { display:flex; gap:8px; align-items:center; }
-.col { display:flex; flex-direction:column; gap:8px; }
-input[type="text"], input[type="number"] { width:100%; padding:10px 12px; border-radius:8px; background:#111827; color:var(--text); border:1px solid #475569; }
-button { background:#2563eb; color:#fff; border:none; border-radius:8px; padding:10px 12px; cursor:pointer; }
-button.secondary { background:#475569; }
-button.good { background:var(--green); }
-button.bad { background:var(--red); }
-.toolbar { padding:12px 16px; border-bottom:1px solid #1e293b; display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
-.viewer { flex:1; min-height:0; display:flex; flex-direction:column; padding:16px; gap:12px; overflow:hidden; }
-.compare-wrap { flex:1; min-height:320px; background:#020617; border:3px solid #334155; border-radius:14px; overflow:auto; display:flex; align-items:center; justify-content:center; position:relative; resize:both; }
-.compare-stage { position:relative; display:inline-block; max-width:100%; }
-.compare-stage img { display:block; max-width:min(1600px, 78vw); max-height:68vh; object-fit:contain; user-select:none; }
-.overlay { position:absolute; inset:0 auto 0 0; overflow:hidden; pointer-events:none; }
-.overlay img { display:block; }
-.slider { width:min(800px, 70vw); }
-.thumbs { display:flex; gap:10px; overflow:auto; padding-bottom:4px; }
-.thumb { min-width:180px; width:180px; background:#111827; border:2px solid #334155; border-radius:12px; padding:8px; cursor:pointer; }
-.thumb.active { border-color:var(--blue); }
-.thumb.good { border-color:var(--green); }
-.thumb.bad { border-color:var(--red); }
-.thumb img, .thumb .missing { width:100%; height:110px; object-fit:contain; background:#020617; border-radius:8px; display:flex; align-items:center; justify-content:center; color:var(--muted); }
-.stats { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
-.stat { background:#111827; border-radius:10px; padding:10px; border:1px solid #334155; }
-.stat .k { font-size:12px; color:var(--muted); }
-.stat .v { font-size:18px; font-weight:700; margin-top:4px; }
-.badge { display:inline-block; padding:4px 8px; border-radius:999px; font-size:12px; font-weight:700; }
-.badge.good { background:rgba(34,197,94,.16); color:#86efac; }
-.badge.bad { background:rgba(239,68,68,.16); color:#fca5a5; }
-.badge.none { background:rgba(148,163,184,.16); color:#cbd5e1; }
-.hidden { display:none; }
-.section-title { font-size:13px; color:#cbd5e1; font-weight:700; }
-.mode-switch { display:flex; gap:8px; margin-top:8px; }
-.mode-btn.active { outline:2px solid var(--blue); }
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+:root{
+  --bg:#0b0d12; --bg-elev:#10131b; --surface:#161a24; --surface-2:#1c2130; --surface-3:#232a3a;
+  --border:rgba(255,255,255,.08); --border-strong:rgba(255,255,255,.16);
+  --text:#e9ebf0; --muted:#9aa3b4; --dim:#6b7484;
+  --accent:#5b6cf0; --accent-2:#4453d6; --accent-soft:rgba(91,108,240,.16);
+  --green:#22c55e; --green-soft:rgba(34,197,94,.15);
+  --red:#ef4444; --red-soft:rgba(239,68,68,.15);
+  --amber:#f59e0b;
+  --radius:14px; --radius-sm:10px; --radius-xs:8px;
+  --ease:cubic-bezier(.16,1,.3,1); --dur:200ms;
+  --shadow:0 10px 34px rgba(0,0,0,.45); --shadow-sm:0 2px 10px rgba(0,0,0,.35);
+  --font:'Inter',system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+}
+*{ box-sizing:border-box; }
+html,body{ height:100%; }
+body{ margin:0; font-family:var(--font); background:
+  radial-gradient(1200px 700px at 80% -10%, rgba(91,108,240,.10), transparent 60%),
+  radial-gradient(900px 600px at -10% 110%, rgba(34,197,94,.06), transparent 55%),
+  var(--bg);
+  color:var(--text); font-size:14px; line-height:1.5; -webkit-font-smoothing:antialiased; }
+::-webkit-scrollbar{ width:10px; height:10px; }
+::-webkit-scrollbar-thumb{ background:#2a3140; border-radius:99px; border:2px solid transparent; background-clip:padding-box; }
+::-webkit-scrollbar-thumb:hover{ background:#36405468; }
+button{ font-family:inherit; }
+.app{ display:flex; height:100vh; min-height:0; }
+
+/* ---------- Sidebar ---------- */
+.sidebar{ width:340px; flex:0 0 340px; background:linear-gradient(180deg,var(--bg-elev),#0c0f16);
+  border-right:1px solid var(--border); padding:14px; overflow-y:auto; display:flex; flex-direction:column; gap:12px; }
+.brand{ display:flex; align-items:center; gap:10px; }
+.brand .logo{ width:34px; height:34px; border-radius:10px; background:linear-gradient(135deg,var(--accent),#7c8cff);
+  display:grid; place-items:center; box-shadow:0 6px 18px rgba(91,108,240,.4); flex:0 0 auto; }
+.brand .logo svg{ width:20px; height:20px; color:#fff; }
+.brand .title{ font-size:15px; font-weight:700; letter-spacing:.2px; }
+.brand .sub{ font-size:11px; color:var(--dim); margin-top:1px; }
+.card{ background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:13px; }
+.card.tight{ padding:10px; }
+.section-label{ font-size:11px; text-transform:uppercase; letter-spacing:.8px; color:var(--dim); font-weight:600; margin-bottom:10px; display:flex; align-items:center; justify-content:space-between; }
+.field{ display:flex; flex-direction:column; gap:6px; margin-bottom:10px; }
+.field:last-child{ margin-bottom:0; }
+label.lbl{ font-size:12px; color:var(--muted); font-weight:500; }
+input[type="text"], input[type="number"]{ width:100%; padding:9px 11px; border-radius:var(--radius-xs); background:#0c0f16;
+  color:var(--text); border:1px solid var(--border-strong); font-size:13px; transition:border-color var(--dur), box-shadow var(--dur); }
+input[type="text"]:focus, input[type="number"]:focus{ outline:none; border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-soft); }
+input[type="file"]{ width:100%; font-size:12px; color:var(--muted); padding:7px; border:1px dashed var(--border-strong);
+  border-radius:var(--radius-xs); background:#0c0f16; cursor:pointer; }
+input[type="file"]::file-selector-button{ font-family:inherit; margin-right:10px; padding:6px 12px; border-radius:7px; border:none;
+  background:var(--surface-3); color:var(--text); cursor:pointer; font-size:12px; }
+
+.btn{ display:inline-flex; align-items:center; justify-content:center; gap:7px; background:var(--accent); color:#fff; border:none;
+  border-radius:var(--radius-xs); padding:9px 13px; cursor:pointer; font-size:13px; font-weight:600;
+  transition:transform var(--dur) var(--ease), background var(--dur), box-shadow var(--dur), opacity var(--dur); white-space:nowrap; }
+.btn svg{ width:16px; height:16px; }
+.btn:hover{ background:var(--accent-2); }
+.btn:active{ transform:scale(.96); }
+.btn:focus-visible{ outline:none; box-shadow:0 0 0 3px var(--accent-soft); }
+.btn.block{ width:100%; }
+.btn.ghost{ background:var(--surface-2); color:var(--text); border:1px solid var(--border-strong); }
+.btn.ghost:hover{ background:var(--surface-3); }
+.btn.good{ background:var(--green); } .btn.good:hover{ background:#1ba34d; }
+.btn.bad{ background:var(--red); } .btn.bad:hover{ background:#d63a3a; }
+.btn.sm{ padding:7px 10px; font-size:12px; }
+.btn.icon{ padding:8px; width:36px; height:36px; }
+.btn:disabled{ opacity:.45; cursor:not-allowed; transform:none; }
+
+/* ---------- Mode tabs ---------- */
+.tabs{ display:flex; background:#0c0f16; border:1px solid var(--border); border-radius:var(--radius-xs); padding:3px; gap:3px; }
+.tab{ flex:1; padding:8px; border:none; background:transparent; color:var(--muted); border-radius:7px; cursor:pointer;
+  font-size:12px; font-weight:600; transition:background var(--dur), color var(--dur); }
+.tab.active{ background:var(--surface-3); color:var(--text); box-shadow:var(--shadow-sm); }
+
+/* ---------- Stats / progress ---------- */
+.progress-track{ height:8px; background:#0c0f16; border-radius:99px; overflow:hidden; border:1px solid var(--border); }
+.progress-fill{ height:100%; background:linear-gradient(90deg,var(--accent),#7c8cff); border-radius:99px;
+  width:0%; transition:width 400ms var(--ease); }
+.stats{ display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:11px; }
+.stat{ background:#0c0f16; border:1px solid var(--border); border-radius:var(--radius-sm); padding:9px 10px; }
+.stat .k{ font-size:11px; color:var(--dim); } .stat .v{ font-size:17px; font-weight:700; margin-top:3px; font-variant-numeric:tabular-nums; }
+
+.badge{ display:inline-flex; align-items:center; gap:4px; padding:3px 8px; border-radius:99px; font-size:11px; font-weight:700; }
+.badge.good{ background:var(--green-soft); color:#86efac; } .badge.bad{ background:var(--red-soft); color:#fca5a5; }
+.badge.none{ background:rgba(148,163,184,.14); color:#cbd5e1; }
+.badge .dot{ width:6px; height:6px; border-radius:99px; background:currentColor; }
+
+/* ---------- Recent / navigator lists ---------- */
+.list{ display:flex; flex-direction:column; gap:6px; max-height:240px; overflow-y:auto; }
+.list-item{ text-align:left; width:100%; background:#0c0f16; border:1px solid var(--border); color:var(--text);
+  border-radius:var(--radius-xs); padding:8px 10px; cursor:pointer; font-size:12px; display:flex; align-items:center; gap:8px;
+  transition:background var(--dur), border-color var(--dur); }
+.list-item:hover{ background:var(--surface-2); border-color:var(--border-strong); }
+.list-item.active{ border-color:var(--accent); background:var(--accent-soft); }
+.list-item .nm{ flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.list-item .idx{ color:var(--dim); font-variant-numeric:tabular-nums; font-size:11px; }
+.tag{ font-size:10px; padding:1px 6px; border-radius:5px; background:var(--surface-3); color:var(--muted); flex:0 0 auto; }
+.chips{ display:flex; gap:6px; margin-bottom:9px; flex-wrap:wrap; }
+.chip{ padding:5px 10px; border-radius:99px; border:1px solid var(--border-strong); background:transparent; color:var(--muted);
+  font-size:11px; cursor:pointer; transition:all var(--dur); font-weight:600; }
+.chip.active{ background:var(--accent-soft); border-color:var(--accent); color:#c7ceff; }
+.hint{ color:var(--dim); font-size:11px; line-height:1.6; }
+.empty-mini{ color:var(--dim); font-size:12px; text-align:center; padding:14px 6px; }
+
+/* ---------- Main ---------- */
+.main{ flex:1; display:flex; flex-direction:column; min-width:0; position:relative; }
+.loadbar{ position:absolute; top:0; left:0; right:0; height:2px; overflow:hidden; z-index:50; opacity:0; transition:opacity 200ms; }
+.loadbar.on{ opacity:1; }
+.loadbar::after{ content:''; position:absolute; height:100%; width:40%; background:linear-gradient(90deg,transparent,var(--accent),transparent);
+  animation:slide 1s infinite linear; }
+@keyframes slide{ 0%{ left:-40%; } 100%{ left:100%; } }
+
+.toolbar{ display:flex; align-items:center; gap:8px; padding:11px 16px; border-bottom:1px solid var(--border);
+  background:rgba(16,19,27,.7); backdrop-filter:blur(8px); flex-wrap:wrap; }
+.tgroup{ display:flex; align-items:center; gap:6px; }
+.divider{ width:1px; height:24px; background:var(--border-strong); margin:0 3px; }
+.segmented{ display:flex; background:#0c0f16; border:1px solid var(--border-strong); border-radius:var(--radius-xs); padding:3px; gap:3px; }
+.seg{ display:inline-flex; align-items:center; gap:6px; padding:6px 11px; border:none; background:transparent; color:var(--muted);
+  border-radius:7px; cursor:pointer; font-size:12px; font-weight:600; transition:all var(--dur); }
+.seg svg{ width:15px; height:15px; } .seg.active{ background:var(--surface-3); color:var(--text); }
+.zoom-level{ min-width:46px; text-align:center; font-size:12px; color:var(--muted); font-variant-numeric:tabular-nums; }
+.group-title{ margin-left:auto; font-size:13px; color:var(--muted); display:flex; align-items:center; gap:10px; }
+.group-title b{ color:var(--text); }
+.switch{ display:inline-flex; align-items:center; gap:7px; font-size:12px; color:var(--muted); cursor:pointer; user-select:none; }
+.switch input{ position:absolute; opacity:0; pointer-events:none; }
+.switch .track{ width:34px; height:19px; border-radius:99px; background:#2a3140; position:relative; transition:background var(--dur); }
+.switch .track::after{ content:''; position:absolute; top:2px; left:2px; width:15px; height:15px; border-radius:99px; background:#fff;
+  transition:transform var(--dur) var(--ease); }
+.switch input:checked + .track{ background:var(--accent); } .switch input:checked + .track::after{ transform:translateX(15px); }
+
+/* ---------- Viewer / stage ---------- */
+.viewer{ flex:1; min-height:0; display:flex; flex-direction:column; padding:16px; gap:13px; overflow:hidden; }
+.stage-wrap{ flex:1; min-height:0; border-radius:var(--radius); border:2px solid var(--border-strong);
+  background:repeating-conic-gradient(#0c0f16 0% 25%, #0e1219 0% 50%) 50%/22px 22px; position:relative; overflow:hidden;
+  display:flex; align-items:center; justify-content:center; transition:border-color var(--dur); touch-action:none; }
+.stage-wrap.good{ border-color:var(--green); } .stage-wrap.bad{ border-color:var(--red); }
+
+.empty-state{ display:flex; flex-direction:column; align-items:center; gap:12px; color:var(--dim); padding:30px; text-align:center; }
+.empty-state svg{ width:54px; height:54px; opacity:.5; }
+.empty-state .es-t{ font-size:15px; color:var(--muted); font-weight:600; }
+
+/* slider mode */
+.slider-stage{ position:relative; display:inline-block; cursor:grab; will-change:transform; }
+.slider-stage.panning{ cursor:grabbing; }
+.slider-stage img{ display:block; max-width:min(1600px, calc(100vw - 420px)); max-height:calc(100vh - 240px);
+  object-fit:contain; user-select:none; -webkit-user-drag:none; }
+.slider-stage .eff{ position:absolute; inset:0; width:100%; height:100%; object-fit:contain; }
+.handle{ position:absolute; top:0; bottom:0; width:2px; background:#fff; box-shadow:0 0 0 1px rgba(0,0,0,.4); cursor:ew-resize; z-index:3; }
+.handle::before{ content:''; position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); width:30px; height:30px;
+  border-radius:99px; background:#fff; box-shadow:0 2px 10px rgba(0,0,0,.5); }
+.handle::after{ content:''; position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); width:14px; height:14px;
+  background:var(--accent); border-radius:99px; }
+.side-tag{ position:absolute; top:8px; padding:3px 9px; border-radius:99px; font-size:11px; font-weight:700; z-index:4;
+  background:rgba(11,13,18,.78); backdrop-filter:blur(4px); pointer-events:none; }
+.side-tag.l{ left:8px; color:#cbd5e1; } .side-tag.r{ right:8px; color:#c7ceff; }
+
+/* side-by-side mode */
+.side-stage{ display:flex; gap:12px; align-items:center; justify-content:center; width:100%; height:100%; padding:8px; }
+.side-pane{ flex:1; min-width:0; height:100%; display:flex; flex-direction:column; gap:6px; align-items:center; justify-content:center; overflow:hidden; }
+.side-pane .pane-label{ font-size:11px; font-weight:700; color:var(--muted); flex:0 0 auto; }
+.side-pane .pane-img{ flex:1; min-height:0; display:flex; align-items:center; justify-content:center; cursor:grab; will-change:transform; }
+.side-pane .pane-img.panning{ cursor:grabbing; }
+.side-pane img{ max-width:100%; max-height:100%; object-fit:contain; user-select:none; -webkit-user-drag:none; display:block; }
+
+.missing-box{ display:flex; align-items:center; justify-content:center; color:var(--dim); font-size:13px;
+  width:240px; height:160px; border:1px dashed var(--border-strong); border-radius:var(--radius-sm); }
+
+/* ---------- Thumbnails ---------- */
+.thumbs{ display:flex; gap:10px; overflow-x:auto; padding-bottom:4px; flex:0 0 auto; }
+.thumb{ position:relative; min-width:158px; width:158px; background:var(--surface); border:2px solid var(--border-strong);
+  border-radius:var(--radius-sm); padding:8px; cursor:pointer; transition:transform var(--dur) var(--ease), border-color var(--dur); }
+.thumb:hover{ transform:translateY(-2px); }
+.thumb.active{ border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-soft); }
+.thumb.good{ border-color:var(--green); } .thumb.bad{ border-color:var(--red); }
+.thumb .pic, .thumb .missing{ width:100%; height:96px; object-fit:contain; background:#0c0f16; border-radius:7px; display:flex;
+  align-items:center; justify-content:center; color:var(--dim); font-size:12px; }
+.thumb .col-no{ font-size:12px; font-weight:600; margin-top:7px; display:flex; align-items:center; justify-content:space-between; }
+.thumb .fn{ color:var(--dim); font-size:10px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; margin-top:2px; }
+
+/* ---------- Toast ---------- */
+.toast-wrap{ position:fixed; bottom:20px; left:50%; transform:translateX(-50%); display:flex; flex-direction:column; gap:8px;
+  z-index:200; align-items:center; }
+.toast{ display:flex; align-items:center; gap:9px; background:var(--surface-2); border:1px solid var(--border-strong);
+  color:var(--text); padding:10px 15px; border-radius:99px; font-size:13px; font-weight:500; box-shadow:var(--shadow);
+  animation:toastin 260ms var(--ease); }
+.toast svg{ width:16px; height:16px; }
+.toast.good{ border-color:rgba(34,197,94,.5); } .toast.good svg{ color:var(--green); }
+.toast.bad{ border-color:rgba(239,68,68,.5); } .toast.bad svg{ color:var(--red); }
+.toast.info svg{ color:var(--accent); }
+@keyframes toastin{ from{ opacity:0; transform:translateY(10px) scale(.96); } to{ opacity:1; transform:none; } }
+
+/* ---------- Modal ---------- */
+.modal{ position:fixed; inset:0; background:rgba(5,7,12,.6); backdrop-filter:blur(4px); z-index:150; display:grid;
+  place-items:center; padding:20px; animation:fade 200ms var(--ease); }
+@keyframes fade{ from{ opacity:0; } to{ opacity:1; } }
+.modal-card{ background:var(--surface); border:1px solid var(--border-strong); border-radius:var(--radius); padding:22px;
+  width:min(460px,100%); box-shadow:var(--shadow); animation:pop 240ms var(--ease); }
+@keyframes pop{ from{ opacity:0; transform:scale(.94) translateY(8px); } to{ opacity:1; transform:none; } }
+.modal-card h3{ margin:0 0 14px; font-size:16px; display:flex; align-items:center; justify-content:space-between; }
+.kbd-row{ display:flex; align-items:center; justify-content:space-between; padding:7px 0; border-bottom:1px solid var(--border); font-size:13px; }
+.kbd-row:last-child{ border-bottom:none; }
+.kbd-row .keys{ display:flex; gap:5px; }
+kbd{ font-family:var(--font); background:#0c0f16; border:1px solid var(--border-strong); border-bottom-width:2px;
+  border-radius:6px; padding:2px 8px; font-size:12px; color:var(--text); min-width:24px; text-align:center; }
+.x-btn{ background:transparent; border:none; color:var(--muted); cursor:pointer; padding:4px; border-radius:6px; }
+.x-btn:hover{ background:var(--surface-3); color:var(--text); } .x-btn svg{ width:18px; height:18px; }
+
+.hidden{ display:none !important; }
+@media (prefers-reduced-motion: reduce){ *{ animation-duration:.001ms !important; transition-duration:.001ms !important; } }
 </style>
 </head>
 <body>
 <div class="app">
   <aside class="sidebar">
-    <div class="card">
-      <div class="title">图片对比标注工具</div>
-      <div class="hint" style="margin-top:6px;">支持服务端目录模式 + 浏览器本地读图模式。</div>
-      <div class="mode-switch">
-        <button id="modeServerBtn" class="secondary mode-btn active">服务端目录</button>
-        <button id="modeLocalBtn" class="secondary mode-btn">浏览器本地</button>
+    <div class="brand">
+      <div class="logo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="3"/><path d="M12 3v18"/><path d="M3 9h6"/><path d="M3 15h6"/></svg></div>
+      <div><div class="title">图片对比标注</div><div class="sub">Image Compare Annotator</div></div>
+    </div>
+
+    <div class="card tight">
+      <div class="tabs">
+        <button id="modeServerBtn" class="tab active">服务端目录</button>
+        <button id="modeLocalBtn" class="tab">浏览器本地</button>
       </div>
     </div>
-    <div class="card col" id="serverModePanel">
-      <div class="section-title">服务端目录模式</div>
-      <div>
-        <label>原图目录</label>
+
+    <div class="card" id="serverModePanel">
+      <div class="section-label">服务端目录模式</div>
+      <div class="field">
+        <label class="lbl">原图目录</label>
         <input id="rawDir" type="text" placeholder="/path/to/raw" />
       </div>
-      <div id="effectDirList" class="col"></div>
-      <div class="row">
-        <button id="addEffectBtn" class="secondary">+ 增加效果图目录</button>
-        <button id="loadBtn">加载数据</button>
+      <div id="effectDirList"></div>
+      <div class="tgroup" style="margin-top:10px; gap:8px;">
+        <button id="addEffectBtn" class="btn ghost sm">+ 效果图目录</button>
+        <button id="loadBtn" class="btn sm" style="margin-left:auto;">加载数据</button>
       </div>
     </div>
-    <div class="card col hidden" id="localModePanel">
-      <div class="section-title">浏览器本地模式</div>
-      <div class="hint">图片不上传，浏览器按需读取；标注结果实时保存到服务端。</div>
-      <div>
-        <label>原图文件夹</label>
+
+    <div class="card hidden" id="localModePanel">
+      <div class="section-label">浏览器本地模式</div>
+      <div class="hint" style="margin-bottom:10px;">图片不上传，浏览器按需读取；标注结果实时保存到服务端。</div>
+      <div class="field">
+        <label class="lbl">原图文件夹</label>
         <input id="rawFolderInput" type="file" webkitdirectory directory multiple />
       </div>
-      <div id="localEffectInputs" class="col"></div>
-      <div class="row">
-        <button id="addLocalEffectBtn" class="secondary">+ 增加效果图文件夹</button>
-        <button id="loadLocalBtn">加载本地数据</button>
+      <div id="localEffectInputs"></div>
+      <div class="tgroup" style="margin:10px 0; gap:8px;">
+        <button id="addLocalEffectBtn" class="btn ghost sm">+ 效果图文件夹</button>
+        <button id="loadLocalBtn" class="btn sm" style="margin-left:auto;">加载本地数据</button>
       </div>
-      <div>
-        <label>可选：导入之前导出的结果 JSON</label>
+      <div class="field">
+        <label class="lbl">可选：导入之前导出的结果 JSON</label>
         <input id="importAnnotationInput" type="file" accept="application/json,.json" />
       </div>
     </div>
+
     <div class="card">
-      <div class="row" style="justify-content:space-between"><strong>最近使用记录</strong><button id="reloadRecentBtn" class="secondary">刷新</button></div>
-      <div id="recentList" class="col" style="margin-top:10px"></div>
+      <div class="section-label">最近使用 <button id="reloadRecentBtn" class="x-btn" title="刷新"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/></svg></button></div>
+      <div id="recentList" class="list"></div>
     </div>
+
     <div class="card">
-      <div class="row" style="justify-content:space-between"><strong>当前状态</strong><span id="saveStatus" class="hint">未保存</span></div>
-      <div style="margin-top:10px" id="currentResult"></div>
-    </div>
-    <div class="card">
-      <strong>统计</strong>
-      <div class="stats" style="margin-top:10px">
+      <div class="section-label">进度概览</div>
+      <div class="progress-track"><div id="progressFill" class="progress-fill"></div></div>
+      <div class="stats">
         <div class="stat"><div class="k">合格率</div><div class="v" id="qualifiedRate">0%</div></div>
         <div class="stat"><div class="k">标注进度</div><div class="v" id="progressRate">0%</div></div>
         <div class="stat"><div class="k">已标列数</div><div class="v" id="labeledCount">0/0</div></div>
         <div class="stat"><div class="k">完成组数</div><div class="v" id="groupCount">0/0</div></div>
       </div>
     </div>
-    <div class="card col">
-      <div class="section-title">导出</div>
-      <div class="row">
-        <button id="exportQualifiedBtn" class="secondary">导出合格文件名</button>
-        <button id="exportUnqualifiedBtn" class="secondary">导出不合格文件名</button>
+
+    <div class="card">
+      <div class="section-label">分组导航</div>
+      <div class="field">
+        <input id="groupSearch" type="text" placeholder="搜索文件名…" />
       </div>
-      <button id="exportSummaryBtn" class="secondary">导出汇总数据</button>
+      <div class="chips">
+        <button class="chip active" data-filter="all">全部</button>
+        <button class="chip" data-filter="todo">未完成</button>
+        <button class="chip" data-filter="done">已完成</button>
+      </div>
+      <div id="groupNav" class="list"><div class="empty-mini">加载数据后显示</div></div>
     </div>
-    <div class="card hint">快捷键：= 合格 / - 不合格 / ←↑ 上一组 / →↓ 下一组 / 1,2,3 选列 / Tab 切列</div>
+
+    <div class="card">
+      <div class="section-label">导出</div>
+      <div class="tgroup" style="gap:8px; margin-bottom:8px;">
+        <button id="exportQualifiedBtn" class="btn ghost sm" style="flex:1;">合格名单</button>
+        <button id="exportUnqualifiedBtn" class="btn ghost sm" style="flex:1;">不合格名单</button>
+      </div>
+      <button id="exportSummaryBtn" class="btn ghost sm block">导出汇总 JSON</button>
+    </div>
+
+    <div class="card tight">
+      <div class="tgroup" style="justify-content:space-between;">
+        <span class="hint">需要帮助？</span>
+        <button id="helpBtn" class="btn ghost sm">快捷键 ?</button>
+      </div>
+    </div>
   </aside>
+
   <main class="main">
+    <div id="loadbar" class="loadbar"></div>
     <div class="toolbar">
-      <button id="prevBtn" class="secondary">上一组</button>
-      <button id="nextBtn" class="secondary">下一组</button>
-      <button id="markGoodBtn" class="good">标合格 (=)</button>
-      <button id="markBadBtn" class="bad">标不合格 (-)</button>
-      <label class="row"><input id="overlayToggle" type="checkbox" checked /> 启用叠加对比</label>
-      <input id="slider" class="slider" type="range" min="0" max="100" value="50" />
-      <span id="groupTitle" class="hint">未加载</span>
+      <div class="tgroup">
+        <button id="prevBtn" class="btn ghost icon" title="上一组 (←)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg></button>
+        <button id="nextBtn" class="btn ghost icon" title="下一组 (→)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg></button>
+        <button id="nextTodoBtn" class="btn ghost sm" title="跳到下一个未完成 (N)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m13 17 5-5-5-5"/><path d="M6 17V7"/></svg>下一个未完成</button>
+      </div>
+      <div class="divider"></div>
+      <div class="tgroup">
+        <button id="markGoodBtn" class="btn good sm" title="标合格 (=)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>合格</button>
+        <button id="markBadBtn" class="btn bad sm" title="标不合格 (-)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>不合格</button>
+      </div>
+      <div class="divider"></div>
+      <div class="segmented">
+        <button id="modeSliderSeg" class="seg active" title="滑块叠加对比"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M12 3v18"/></svg>滑块</button>
+        <button id="modeSideSeg" class="seg" title="并排对比"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="18" rx="1.5"/><rect x="14" y="3" width="7" height="18" rx="1.5"/></svg>并排</button>
+      </div>
+      <div class="divider"></div>
+      <div class="tgroup">
+        <button id="zoomOutBtn" class="btn ghost icon" title="缩小"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/><path d="M8 11h6"/></svg></button>
+        <span id="zoomLevel" class="zoom-level">100%</span>
+        <button id="zoomInBtn" class="btn ghost icon" title="放大"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/><path d="M11 8v6"/><path d="M8 11h6"/></svg></button>
+        <button id="zoomResetBtn" class="btn ghost icon" title="重置视图 (F)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/></svg></button>
+      </div>
+      <div class="group-title" id="groupTitle">未加载</div>
     </div>
+
     <div class="viewer">
-      <div id="compareWrap" class="compare-wrap">
-        <div id="emptyState" class="hint">请先加载目录</div>
-        <div id="compareStage" class="compare-stage hidden">
-          <img id="rawImage" alt="raw" />
-          <div id="overlay" class="overlay"><img id="effectImage" alt="effect" /></div>
+      <div id="stageWrap" class="stage-wrap">
+        <div id="emptyState" class="empty-state">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="3"/><path d="M12 3v18"/><circle cx="7.5" cy="8" r="1.2" fill="currentColor"/><path d="m4 15 2.5-2.5 2 2"/></svg>
+          <div class="es-t">请先在左侧加载图片目录</div>
+          <div class="hint">支持服务端目录或浏览器本地文件夹</div>
+        </div>
+
+        <!-- slider mode -->
+        <div id="sliderStage" class="slider-stage hidden">
+          <span class="side-tag l">原图</span>
+          <span class="side-tag r">效果图</span>
+          <img id="rawImage" alt="原图" />
+          <img id="effImage" class="eff" alt="效果图" />
+          <div id="sliderHandle" class="handle"></div>
+        </div>
+
+        <!-- side by side mode -->
+        <div id="sideStage" class="side-stage hidden">
+          <div class="side-pane">
+            <div class="pane-label">原图</div>
+            <div class="pane-img" id="sideRawPane"></div>
+          </div>
+          <div class="side-pane">
+            <div class="pane-label" id="sideEffLabel">效果图</div>
+            <div class="pane-img" id="sideEffPane"></div>
+          </div>
         </div>
       </div>
       <div class="thumbs" id="thumbs"></div>
     </div>
   </main>
 </div>
-<script>
-const state = { session:null, groupIndex:0, effectIndex:0, mode:'server-path', localFiles:new Map(), saveStatus:'未保存', sliderToggleRight:false };
 
-function setSaveStatus(text){ document.getElementById('saveStatus').textContent = text; }
+<div id="toastWrap" class="toast-wrap"></div>
+
+<div id="helpModal" class="modal hidden">
+  <div class="modal-card">
+    <h3>快捷键<button class="x-btn" id="helpClose"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button></h3>
+    <div class="kbd-row"><span>标合格</span><span class="keys"><kbd>=</kbd></span></div>
+    <div class="kbd-row"><span>标不合格</span><span class="keys"><kbd>-</kbd></span></div>
+    <div class="kbd-row"><span>上一组 / 下一组</span><span class="keys"><kbd>←</kbd><kbd>↑</kbd> / <kbd>→</kbd><kbd>↓</kbd></span></div>
+    <div class="kbd-row"><span>跳到下一个未完成</span><span class="keys"><kbd>N</kbd></span></div>
+    <div class="kbd-row"><span>选择第 1/2/3 列</span><span class="keys"><kbd>1</kbd><kbd>2</kbd><kbd>3</kbd></span></div>
+    <div class="kbd-row"><span>逐列切换</span><span class="keys"><kbd>Tab</kbd></span></div>
+    <div class="kbd-row"><span>滑块快速翻转 (原图↔效果)</span><span class="keys"><kbd>Space</kbd></span></div>
+    <div class="kbd-row"><span>切换滑块 / 并排模式</span><span class="keys"><kbd>S</kbd></span></div>
+    <div class="kbd-row"><span>重置缩放/平移</span><span class="keys"><kbd>F</kbd></span></div>
+    <div class="kbd-row"><span>滚轮缩放 · 拖拽平移</span><span class="hint">在图片区域</span></div>
+  </div>
+</div>
+
+<script>
+const SVG = {
+  check:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>',
+  x:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>',
+  info:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>'
+};
+const state = { session:null, groupIndex:0, effectIndex:0, mode:'server-path', localFiles:new Map(),
+  compareMode:'slider', sliderPct:50, sliderToggleRight:false, zoom:{scale:1,x:0,y:0}, filter:'all', search:'', busy:0 };
+
+const $ = (id) => document.getElementById(id);
+
+/* ---------- feedback ---------- */
+function toast(msg, type='info'){
+  const wrap = $('toastWrap');
+  const el = document.createElement('div');
+  el.className = `toast ${type}`;
+  el.innerHTML = `${SVG[type==='good'?'check':type==='bad'?'x':'info']}<span>${msg}</span>`;
+  wrap.appendChild(el);
+  setTimeout(()=>{ el.style.transition='opacity .3s, transform .3s'; el.style.opacity='0'; el.style.transform='translateY(8px)'; setTimeout(()=>el.remove(),300); }, 2400);
+}
+function setBusy(on){ state.busy = Math.max(0, state.busy + (on?1:-1)); $('loadbar').classList.toggle('on', state.busy>0); }
+
+/* ---------- mode panels ---------- */
 function setMode(mode){
   state.mode = mode;
-  document.getElementById('serverModePanel').classList.toggle('hidden', mode !== 'server-path');
-  document.getElementById('localModePanel').classList.toggle('hidden', mode !== 'browser-local');
-  document.getElementById('modeServerBtn').classList.toggle('active', mode === 'server-path');
-  document.getElementById('modeLocalBtn').classList.toggle('active', mode === 'browser-local');
+  $('serverModePanel').classList.toggle('hidden', mode !== 'server-path');
+  $('localModePanel').classList.toggle('hidden', mode !== 'browser-local');
+  $('modeServerBtn').classList.toggle('active', mode === 'server-path');
+  $('modeLocalBtn').classList.toggle('active', mode === 'browser-local');
 }
-function effectInput(idx, value='') {
+function effectInput(idx, value=''){
   const wrap = document.createElement('div');
-  wrap.className = 'row';
-  wrap.innerHTML = `<input type="text" placeholder="效果图目录 ${idx+1}" value="${value}"><button class="secondary" data-remove="${idx}">删</button>`;
+  wrap.className = 'field';
+  wrap.innerHTML = `<label class="lbl">效果图目录 ${idx+1}</label><div class="tgroup" style="gap:8px;"><input type="text" placeholder="/path/to/effect-${idx+1}" value="${value}"><button class="btn ghost icon" data-remove="${idx}" title="删除"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/></svg></button></div>`;
   return wrap;
 }
-function localEffectInput(idx) {
+function localEffectInput(idx){
   const wrap = document.createElement('div');
-  wrap.className = 'col';
-  wrap.innerHTML = `<label>效果图文件夹 ${idx+1}</label><div class="row"><input type="file" data-local-effect="${idx}" webkitdirectory directory multiple /><button class="secondary" data-remove-local="${idx}">删</button></div>`;
+  wrap.className = 'field';
+  wrap.innerHTML = `<label class="lbl">效果图文件夹 ${idx+1}</label><div class="tgroup" style="gap:8px;"><input type="file" data-local-effect="${idx}" webkitdirectory directory multiple /><button class="btn ghost icon" data-remove-local="${idx}" title="删除"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/></svg></button></div>`;
   return wrap;
 }
-function renderEffectInputs(values=[]) {
-  const box = document.getElementById('effectDirList'); box.innerHTML = '';
+function renderEffectInputs(values=[]){
+  const box = $('effectDirList'); box.innerHTML = '';
   const arr = values.length ? values : [''];
-  arr.forEach((v, i) => box.appendChild(effectInput(i, v)));
-  box.querySelectorAll('[data-remove]').forEach(btn => btn.onclick = () => { const vals = getEffectDirs(); vals.splice(Number(btn.dataset.remove), 1); renderEffectInputs(vals.length ? vals : ['']); });
+  arr.forEach((v,i)=> box.appendChild(effectInput(i,v)));
+  box.querySelectorAll('[data-remove]').forEach(btn => btn.onclick = ()=>{ const vals = getEffectDirs(); vals.splice(Number(btn.dataset.remove),1); renderEffectInputs(vals.length?vals:['']); });
 }
 function renderLocalEffectInputs(count=1){
-  const box = document.getElementById('localEffectInputs'); box.innerHTML='';
+  const box = $('localEffectInputs'); box.innerHTML = '';
   for(let i=0;i<count;i++) box.appendChild(localEffectInput(i));
-  box.querySelectorAll('[data-remove-local]').forEach(btn => btn.onclick = () => renderLocalEffectInputs(Math.max(1,count-1)));
+  box.querySelectorAll('[data-remove-local]').forEach(btn => btn.onclick = ()=> renderLocalEffectInputs(Math.max(1,count-1)));
 }
-function getEffectDirs() { return [...document.querySelectorAll('#effectDirList input')].map(x => x.value.trim()).filter(Boolean); }
-async function api(path, options={}) {
-  const r = await fetch(path, { headers:{'Content-Type':'application/json'}, ...options });
-  const data = await r.json();
-  if (!r.ok) throw new Error(data.error || '请求失败');
-  return data;
+function getEffectDirs(){ return [...document.querySelectorAll('#effectDirList input[type=text]')].map(x=>x.value.trim()).filter(Boolean); }
+
+/* ---------- api ---------- */
+async function api(path, options={}){
+  setBusy(true);
+  try{
+    const r = await fetch(path, { headers:{'Content-Type':'application/json'}, ...options });
+    const data = await r.json();
+    if(!r.ok) throw new Error(data.error || '请求失败');
+    return data;
+  } finally { setBusy(false); }
 }
 async function loadRecent(){
   const data = await api('/api/recent');
-  const list = document.getElementById('recentList'); list.innerHTML='';
+  const list = $('recentList'); list.innerHTML = '';
   (data.items || []).forEach(item => {
     const b = document.createElement('button');
-    b.className = 'secondary'; b.style.textAlign='left';
-    b.textContent = `${item.mode === 'browser-local' ? '[本地]' : '[目录]'} ${item.label}`;
-    b.onclick = () => {
+    b.className = 'list-item';
+    const isLocal = item.mode === 'browser-local';
+    b.innerHTML = `<span class="tag">${isLocal?'本地':'目录'}</span><span class="nm">${item.label}</span>`;
+    b.onclick = ()=>{
       if(item.mode === 'server-path'){
         setMode('server-path');
-        document.getElementById('rawDir').value = item.raw_dir || '';
-        renderEffectInputs(item.effect_dirs || ['']);
+        $('rawDir').value = item.raw_dir || '';
+        renderEffectInputs(item.effect_dirs && item.effect_dirs.length ? item.effect_dirs : ['']);
+        toast('已填入目录，点击「加载数据」', 'info');
+      } else {
+        setMode('browser-local');
+        toast('本地模式需重新选择文件夹', 'info');
       }
     };
     list.appendChild(b);
   });
-  if(!list.children.length) list.innerHTML = '<div class="hint">暂无记录</div>';
+  if(!list.children.length) list.innerHTML = '<div class="empty-mini">暂无记录</div>';
 }
 function badge(label){
-  if(label==='qualified') return '<span class="badge good">合格</span>';
-  if(label==='unqualified') return '<span class="badge bad">不合格</span>';
+  if(label==='qualified') return '<span class="badge good"><span class="dot"></span>合格</span>';
+  if(label==='unqualified') return '<span class="badge bad"><span class="dot"></span>不合格</span>';
   return '<span class="badge none">未标注</span>';
 }
 function currentGroup(){ return state.session?.groups?.[state.groupIndex]; }
 function currentEffect(){ return currentGroup()?.effects?.[state.effectIndex]; }
+function isGroupDone(g){
+  if(!g) return true;
+  if(g.finalized) return true;
+  if(!g.effects.length) return true;
+  return g.effects.every(e => e.missing || e.label==='qualified' || e.label==='unqualified');
+}
+
+/* ---------- render ---------- */
 function renderStats(){
   const s = state.session?.stats; if(!s) return;
-  document.getElementById('qualifiedRate').textContent = (s.qualified_rate*100).toFixed(1)+'%';
-  document.getElementById('progressRate').textContent = (s.progress*100).toFixed(1)+'%';
-  document.getElementById('labeledCount').textContent = `${s.labeled}/${s.total_effect_slots}`;
-  document.getElementById('groupCount').textContent = `${s.completed_groups}/${s.total_groups}`;
+  $('qualifiedRate').textContent = (s.qualified_rate*100).toFixed(1)+'%';
+  $('progressRate').textContent = (s.progress*100).toFixed(1)+'%';
+  $('labeledCount').textContent = `${s.labeled}/${s.total_effect_slots}`;
+  $('groupCount').textContent = `${s.completed_groups}/${s.total_groups}`;
+  $('progressFill').style.width = (s.progress*100).toFixed(1)+'%';
 }
-function renderCurrent(){
-  const group = currentGroup(); const effect = currentEffect();
-  document.getElementById('groupTitle').textContent = group ? `组 ${state.groupIndex+1}/${state.session.groups.length}：${group.name} | 当前列 ${state.effectIndex+1}` : '未加载';
-  const box = document.getElementById('currentResult');
-  if(!group || !effect){ box.innerHTML = '<div class="hint">暂无数据</div>'; return; }
-  box.innerHTML = `<div>模式：<strong>${state.session.mode === 'browser-local' ? '浏览器本地' : '服务端目录'}</strong></div><div style="margin-top:8px">当前组：<strong>${group.name}</strong></div><div style="margin-top:8px">当前列：第 ${state.effectIndex+1} 列</div><div style="margin-top:8px">结果：${badge(effect.label)}</div><div style="margin-top:8px">保存位置：<div class="hint">${state.session.annotation_path}</div></div>`;
+function renderGroupTitle(){
+  const g = currentGroup();
+  $('groupTitle').innerHTML = g
+    ? `<span>组 <b>${state.groupIndex+1}</b> / ${state.session.groups.length}</span><span>·</span><span title="${g.name}"><b>${g.name}</b></span>${g.effects.length>1?`<span>· 第 <b>${state.effectIndex+1}</b> 列</span>`:''}`
+    : '未加载';
+}
+function renderGroupNav(){
+  const box = $('groupNav');
+  if(!state.session){ box.innerHTML = '<div class="empty-mini">加载数据后显示</div>'; return; }
+  const q = state.search.toLowerCase();
+  const items = [];
+  state.session.groups.forEach((g, i) => {
+    if(q && !g.name.toLowerCase().includes(q)) return;
+    const done = isGroupDone(g);
+    if(state.filter==='todo' && done) return;
+    if(state.filter==='done' && !done) return;
+    items.push({ g, i, done });
+  });
+  if(!items.length){ box.innerHTML = '<div class="empty-mini">无匹配分组</div>'; return; }
+  const capped = items.slice(0, 500);
+  box.innerHTML = '';
+  capped.forEach(({g,i,done})=>{
+    const b = document.createElement('button');
+    b.className = `list-item ${i===state.groupIndex?'active':''}`;
+    const st = done ? '<span class="badge good" style="padding:1px 6px;"><span class="dot"></span></span>'
+                    : '<span class="badge none" style="padding:1px 6px;">·</span>';
+    b.innerHTML = `<span class="idx">${i+1}</span><span class="nm">${g.name}</span>${st}`;
+    b.onclick = ()=> setGroupTo(i);
+    box.appendChild(b);
+  });
+  if(items.length > 500){ const m = document.createElement('div'); m.className='empty-mini'; m.textContent=`仅显示前 500 / 共 ${items.length}`; box.appendChild(m); }
 }
 function fileUrl(key){
   if(!key) return null;
@@ -583,137 +894,273 @@ function getEffectSrc(effect){
   return effect.path ? '/api/file?path=' + encodeURIComponent(effect.path) : null;
 }
 function renderThumbs(){
-  const thumbs = document.getElementById('thumbs'); thumbs.innerHTML='';
+  const thumbs = $('thumbs'); thumbs.innerHTML = '';
   const group = currentGroup(); if(!group) return;
   group.effects.forEach((ef, idx) => {
     const src = getEffectSrc(ef);
     const div = document.createElement('div');
     div.className = `thumb ${idx===state.effectIndex?'active':''} ${ef.label==='qualified'?'good':''} ${ef.label==='unqualified'?'bad':''}`;
-    div.innerHTML = `${src ? `<img src="${src}">` : `<div class="missing">缺失</div>`}<div style="margin-top:8px">列 ${idx+1}</div><div class="hint">${ef.display_name || '无对应文件'}</div><div style="margin-top:6px">${badge(ef.label)}</div>`;
-    div.onclick = async () => { state.effectIndex = idx; await persistView(); renderAll(); };
+    div.innerHTML = `${src ? `<img class="pic" src="${src}">` : `<div class="missing">缺失</div>`}`
+      + `<div class="col-no"><span>列 ${idx+1}</span>${badge(ef.label)}</div>`
+      + `<div class="fn">${ef.display_name || '无对应文件'}</div>`;
+    div.onclick = async ()=>{ state.effectIndex = idx; await persistView(); renderAll(); };
     thumbs.appendChild(div);
   });
 }
+function applyZoom(){
+  const t = state.zoom;
+  const tr = `translate(${t.x}px,${t.y}px) scale(${t.scale})`;
+  document.querySelectorAll('.ztrans').forEach(el => { el.style.transform = tr; });
+  $('zoomLevel').textContent = Math.round(t.scale*100)+'%';
+}
+function resetZoom(){ state.zoom = {scale:1,x:0,y:0}; applyZoom(); }
 function applyBorder(label){
-  const wrap = document.getElementById('compareWrap');
-  wrap.style.borderColor = label === 'qualified' ? '#22c55e' : label === 'unqualified' ? '#ef4444' : '#334155';
+  const wrap = $('stageWrap');
+  wrap.classList.toggle('good', label==='qualified');
+  wrap.classList.toggle('bad', label==='unqualified');
 }
 function renderCompare(){
   const group = currentGroup(); const effect = currentEffect();
-  const empty = document.getElementById('emptyState'); const stage = document.getElementById('compareStage');
-  if(!group || !effect){ empty.classList.remove('hidden'); stage.classList.add('hidden'); return; }
+  const empty = $('emptyState'), slider = $('sliderStage'), side = $('sideStage');
+  if(!group || !effect){ empty.classList.remove('hidden'); slider.classList.add('hidden'); side.classList.add('hidden'); return; }
   const rawSrc = getRawSrc(group); const effSrc = getEffectSrc(effect);
-  if(!rawSrc){ empty.classList.remove('hidden'); stage.classList.add('hidden'); return; }
-  empty.classList.add('hidden'); stage.classList.remove('hidden');
-  const raw = document.getElementById('rawImage'); const eff = document.getElementById('effectImage');
-  raw.src = rawSrc; eff.src = effSrc || rawSrc;
-  const enabled = document.getElementById('overlayToggle').checked && !!effSrc;
-  const pct = Number(document.getElementById('slider').value);
-  const overlay = document.getElementById('overlay');
-  overlay.style.width = enabled ? pct + '%' : '0%'; overlay.style.display = enabled ? 'block' : 'none';
+  if(!rawSrc && !effSrc){ empty.classList.remove('hidden'); slider.classList.add('hidden'); side.classList.add('hidden'); return; }
+  empty.classList.add('hidden');
+  const effLabel = state.session.effect_dirs?.[state.effectIndex] || `效果图 ${state.effectIndex+1}`;
+
+  if(state.compareMode === 'slider'){
+    side.classList.add('hidden'); slider.classList.remove('hidden');
+    slider.classList.add('ztrans');
+    const raw = $('rawImage'), eff = $('effImage');
+    raw.src = rawSrc || effSrc; eff.src = effSrc || rawSrc;
+    eff.style.display = effSrc ? 'block' : 'none';
+    const pct = state.sliderPct;
+    eff.style.clipPath = `inset(0 0 0 ${pct}%)`;
+    $('sliderHandle').style.left = pct + '%';
+    $('sliderHandle').style.display = effSrc ? 'block' : 'none';
+    slider.querySelector('.side-tag.r').textContent = effLabel;
+  } else {
+    slider.classList.remove('hidden','ztrans'); slider.classList.add('hidden');
+    side.classList.remove('hidden');
+    $('sideEffLabel').textContent = effLabel;
+    const rawPane = $('sideRawPane'), effPane = $('sideEffPane');
+    rawPane.className = 'pane-img ztrans'; effPane.className = 'pane-img ztrans';
+    rawPane.innerHTML = rawSrc ? `<img src="${rawSrc}">` : '<div class="missing-box">原图缺失</div>';
+    effPane.innerHTML = effSrc ? `<img src="${effSrc}">` : '<div class="missing-box">效果图缺失</div>';
+  }
+  applyZoom();
   applyBorder(effect.label);
 }
-function renderAll(){ renderStats(); renderCurrent(); renderThumbs(); renderCompare(); }
+function renderAll(){ renderStats(); renderGroupTitle(); renderGroupNav(); renderThumbs(); renderCompare(); }
+
+/* ---------- persistence ---------- */
 async function persistView(){
   if(!state.session) return;
-  setSaveStatus('保存中...');
   await api('/api/view', { method:'POST', body: JSON.stringify({ mode: state.session.mode, dataset_key: state.session.mode === 'browser-local' ? state.session.dataset_id : state.session.raw_dir, group_index: state.groupIndex, effect_index: state.effectIndex }) });
-  setSaveStatus('已保存');
+}
+function syncIndexFromSession(data, fallbackGroup){
+  state.groupIndex = Math.min(fallbackGroup ?? (data.annotation.last_group_index || 0), Math.max(data.groups.length-1, 0));
+  const eff = data.groups[state.groupIndex]?.effects?.length;
+  state.effectIndex = eff ? Math.min(data.annotation.last_selected_effect_index || 0, eff-1) : 0;
 }
 async function loadServerSession(){
-  const raw_dir = document.getElementById('rawDir').value.trim();
+  const raw_dir = $('rawDir').value.trim();
+  if(!raw_dir) throw new Error('请填写原图目录');
   const effect_dirs = getEffectDirs();
   const data = await api('/api/load', { method:'POST', body: JSON.stringify({ mode:'server-path', raw_dir, effect_dirs }) });
-  state.session = data; state.groupIndex = Math.min(data.annotation.last_group_index || 0, Math.max(data.groups.length-1,0)); state.effectIndex = data.groups[state.groupIndex]?.effects?.length ? Math.min(data.annotation.last_selected_effect_index || 0, data.groups[state.groupIndex].effects.length-1) : 0; setSaveStatus('已保存'); renderAll(); await loadRecent();
+  state.session = data; syncIndexFromSession(data); resetZoom(); renderAll(); await loadRecent();
+  toast(`已加载 ${data.groups.length} 组图片`, 'good');
 }
 function collectFiles(fileList, prefix){
   const files = [...fileList].filter(f => /\.(jpg|jpeg|png|webp|bmp|gif)$/i.test(f.name));
   files.sort((a,b)=>a.name.localeCompare(b.name));
-  return files.map((f, idx) => { const key = `${prefix}:${idx}:${f.webkitRelativePath || f.name}`; state.localFiles.set(key, f); return { name:f.name, rel_path:f.webkitRelativePath || f.name, size:f.size, client_file_key:key }; });
+  return files.map((f, idx)=>{ const key = `${prefix}:${idx}:${f.webkitRelativePath || f.name}`; state.localFiles.set(key, f); return { name:f.name, rel_path:f.webkitRelativePath || f.name, size:f.size, client_file_key:key }; });
 }
 async function loadLocalSession(){
-  const rawInput = document.getElementById('rawFolderInput');
+  const rawInput = $('rawFolderInput');
   if(!rawInput.files?.length) throw new Error('请先选择原图文件夹');
   state.localFiles.clear();
   const raw_files = collectFiles(rawInput.files, 'raw');
   const effect_dirs = [];
   const localInputs = [...document.querySelectorAll('#localEffectInputs input[type=file]')];
-  localInputs.forEach((input, idx) => { effect_dirs.push({ name: input.files?.[0]?.webkitRelativePath?.split('/')[0] || `effect-${idx+1}`, files: collectFiles(input.files || [], `effect-${idx}`) }); });
+  localInputs.forEach((input, idx)=>{ effect_dirs.push({ name: input.files?.[0]?.webkitRelativePath?.split('/')[0] || `effect-${idx+1}`, files: collectFiles(input.files || [], `effect-${idx}`) }); });
   let imported_annotation = null;
-  const imp = document.getElementById('importAnnotationInput').files?.[0];
+  const imp = $('importAnnotationInput').files?.[0];
   if(imp) imported_annotation = JSON.parse(await imp.text());
   const data = await api('/api/load', { method:'POST', body: JSON.stringify({ mode:'browser-local', dataset_name: rawInput.files[0].webkitRelativePath?.split('/')[0] || 'browser-local', raw_files, effect_dirs, imported_annotation }) });
-  state.session = data; state.groupIndex = Math.min(data.annotation.last_group_index || 0, Math.max(data.groups.length-1,0)); state.effectIndex = data.groups[state.groupIndex]?.effects?.length ? Math.min(data.annotation.last_selected_effect_index || 0, data.groups[state.groupIndex].effects.length-1) : 0; setSaveStatus('已保存'); renderAll(); await loadRecent();
+  state.session = data; syncIndexFromSession(data); resetZoom(); renderAll(); await loadRecent();
+  toast(`已加载 ${data.groups.length} 组本地图片`, 'good');
 }
 async function mark(label){
-  const g=currentGroup(); const e=currentEffect(); if(!g || !e) return;
-  setSaveStatus('保存中...');
+  const g = currentGroup(); const e = currentEffect(); if(!g || !e) return;
   const data = await api('/api/mark', { method:'POST', body: JSON.stringify({ mode: state.session.mode, dataset_key: state.session.mode === 'browser-local' ? state.session.dataset_id : state.session.raw_dir, group_name:g.name, effect_index:state.effectIndex, label, group_index:state.groupIndex }) });
-  state.session = data; setSaveStatus('已保存'); renderAll();
+  state.session = data; renderAll();
+  toast(label==='qualified' ? '已标记为合格' : '已标记为不合格', label==='qualified' ? 'good' : 'bad');
 }
-async function goGroup(delta){
-  if(!state.session) return;
+async function commitCurrentGroup(){
   const group = currentGroup();
   if(group && group.effects.length > 1){
-    const anyMarked = group.effects.some(x => x.label === 'qualified' || x.label === 'unqualified');
+    const anyMarked = group.effects.some(x => x.label==='qualified' || x.label==='unqualified');
     if(anyMarked && !group.finalized){
-      setSaveStatus('保存中...');
       state.session = await api('/api/finalize', { method:'POST', body: JSON.stringify({ mode: state.session.mode, dataset_key: state.session.mode === 'browser-local' ? state.session.dataset_id : state.session.raw_dir, group_name: group.name, selected_index: state.effectIndex, group_index: state.groupIndex }) });
     }
   }
-  state.groupIndex = Math.max(0, Math.min(state.session.groups.length - 1, state.groupIndex + delta)); state.effectIndex = 0; await persistView();
-  const payload = state.session.mode === 'browser-local' ? { mode:'browser-local', dataset_id: state.session.dataset_id } : { mode:'server-path', raw_dir: state.session.raw_dir, effect_dirs: state.session.effect_dirs };
-  const data = await api('/api/reload', { method:'POST', body: JSON.stringify(payload) });
-  state.session = data; state.groupIndex = Math.min(data.annotation.last_group_index || state.groupIndex, Math.max(data.groups.length - 1, 0)); state.effectIndex = data.groups[state.groupIndex]?.effects?.length ? Math.min(data.annotation.last_selected_effect_index || 0, data.groups[state.groupIndex].effects.length - 1) : 0; setSaveStatus('已保存'); renderAll();
 }
+async function reloadSession(){
+  const payload = state.session.mode === 'browser-local'
+    ? { mode:'browser-local', dataset_id: state.session.dataset_id }
+    : { mode:'server-path', raw_dir: state.session.raw_dir, effect_dirs: state.session.effect_dirs };
+  const data = await api('/api/reload', { method:'POST', body: JSON.stringify(payload) });
+  state.session = data; syncIndexFromSession(data);
+}
+async function setGroupTo(idx){
+  if(!state.session) return;
+  await commitCurrentGroup();
+  state.groupIndex = Math.max(0, Math.min(state.session.groups.length-1, idx));
+  state.effectIndex = 0; resetZoom(); await persistView();
+  await reloadSession(); renderAll();
+}
+async function goGroup(delta){ if(!state.session) return; await setGroupTo(state.groupIndex + delta); }
+async function goNextTodo(){
+  if(!state.session) return;
+  const n = state.session.groups.length;
+  for(let off=1; off<=n; off++){
+    const i = (state.groupIndex + off) % n;
+    if(!isGroupDone(state.session.groups[i])){ await setGroupTo(i); toast('已跳到下一个未完成', 'info'); return; }
+  }
+  toast('全部分组已完成 🎉'.replace('🎉',''), 'good');
+}
+
+/* ---------- export ---------- */
 function downloadBlob(name, content, type){ const blob = new Blob([content], {type}); const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; a.click(); setTimeout(()=>URL.revokeObjectURL(a.href), 1000); }
 async function exportData(kind){
-  if(!state.session) return;
+  if(!state.session){ toast('请先加载数据', 'info'); return; }
   const data = await api('/api/export', { method:'POST', body: JSON.stringify({ mode: state.session.mode, dataset_key: state.session.mode === 'browser-local' ? state.session.dataset_id : state.session.raw_dir }) });
   if(kind==='qualified') downloadBlob(`${data.dataset_name || 'dataset'}-qualified.txt`, data.qualified_names.join('\n'), 'text/plain;charset=utf-8');
   else if(kind==='unqualified') downloadBlob(`${data.dataset_name || 'dataset'}-unqualified.txt`, data.unqualified_names.join('\n'), 'text/plain;charset=utf-8');
   else downloadBlob(`${data.dataset_name || 'dataset'}-summary.json`, JSON.stringify(data, null, 2), 'application/json;charset=utf-8');
+  toast('已导出', 'good');
 }
-window.addEventListener('keydown', async (e) => {
-  const tag = document.activeElement?.tagName;
-  const isTyping = ['INPUT','TEXTAREA'].includes(tag) && document.activeElement?.id !== 'slider';
-  if(isTyping) return;
-  if(e.key === '='){ e.preventDefault(); await mark('qualified'); }
-  else if(e.key === '-'){ e.preventDefault(); await mark('unqualified'); }
-  else if(e.key === 'ArrowRight' || e.key === 'ArrowDown'){ e.preventDefault(); document.body.focus?.(); await goGroup(1); }
-  else if(e.key === 'ArrowLeft' || e.key === 'ArrowUp'){ e.preventDefault(); document.body.focus?.(); await goGroup(-1); }
-  else if(e.key === ' ' || e.code === 'Space'){
+
+/* ---------- zoom & pan ---------- */
+function setupZoomPan(){
+  const wrap = $('stageWrap');
+  wrap.addEventListener('wheel', (e)=>{
+    if(!state.session) return;
     e.preventDefault();
-    const slider = document.getElementById('slider');
-    slider.value = state.sliderToggleRight ? 0 : 100;
-    state.sliderToggleRight = !state.sliderToggleRight;
-    renderCompare();
+    const rect = wrap.getBoundingClientRect();
+    const cx = e.clientX - rect.left - rect.width/2;
+    const cy = e.clientY - rect.top - rect.height/2;
+    const factor = e.deltaY < 0 ? 1.12 : 1/1.12;
+    const prev = state.zoom.scale;
+    const next = Math.max(1, Math.min(8, prev*factor));
+    if(next === prev) return;
+    state.zoom.x = cx - (next/prev)*(cx - state.zoom.x);
+    state.zoom.y = cy - (next/prev)*(cy - state.zoom.y);
+    state.zoom.scale = next;
+    if(next === 1){ state.zoom.x = 0; state.zoom.y = 0; }
+    applyZoom();
+  }, { passive:false });
+
+  let panning = false, sx=0, sy=0, ox=0, oy=0, panEl=null;
+  wrap.addEventListener('pointerdown', (e)=>{
+    if(!state.session) return;
+    if(e.target.id === 'sliderHandle') return; // handle has its own drag
+    const t = e.target.closest('.ztrans'); if(!t) return;
+    panning = true; panEl = t; sx = e.clientX; sy = e.clientY; ox = state.zoom.x; oy = state.zoom.y;
+    t.classList.add('panning'); wrap.setPointerCapture(e.pointerId);
+  });
+  wrap.addEventListener('pointermove', (e)=>{
+    if(!panning) return;
+    state.zoom.x = ox + (e.clientX - sx); state.zoom.y = oy + (e.clientY - sy); applyZoom();
+  });
+  const endPan = ()=>{ if(panning){ panning=false; document.querySelectorAll('.panning').forEach(el=>el.classList.remove('panning')); } };
+  wrap.addEventListener('pointerup', endPan);
+  wrap.addEventListener('pointercancel', endPan);
+  wrap.addEventListener('dblclick', ()=>{ if(state.session) resetZoom(); });
+}
+
+/* ---------- slider handle drag ---------- */
+function setupSliderHandle(){
+  const handle = $('sliderHandle'); const stage = $('sliderStage');
+  let dragging = false;
+  const move = (clientX)=>{
+    const rect = stage.getBoundingClientRect();
+    const pct = Math.max(0, Math.min(100, ((clientX - rect.left) / rect.width) * 100));
+    state.sliderPct = pct; renderCompare();
+  };
+  handle.addEventListener('pointerdown', (e)=>{ e.stopPropagation(); dragging = true; handle.setPointerCapture(e.pointerId); });
+  handle.addEventListener('pointermove', (e)=>{ if(dragging){ e.stopPropagation(); move(e.clientX); } });
+  const end = (e)=>{ if(dragging){ dragging=false; try{ handle.releasePointerCapture(e.pointerId); }catch(_){} } };
+  handle.addEventListener('pointerup', end);
+  handle.addEventListener('pointercancel', end);
+}
+
+/* ---------- compare mode ---------- */
+function setCompareMode(mode){
+  state.compareMode = mode;
+  $('modeSliderSeg').classList.toggle('active', mode==='slider');
+  $('modeSideSeg').classList.toggle('active', mode==='side');
+  resetZoom(); renderCompare();
+}
+
+/* ---------- keyboard ---------- */
+window.addEventListener('keydown', async (e)=>{
+  if(!$('helpModal').classList.contains('hidden') && (e.key==='Escape')){ $('helpModal').classList.add('hidden'); return; }
+  const tag = document.activeElement?.tagName;
+  const isTyping = ['INPUT','TEXTAREA'].includes(tag);
+  if(isTyping) return;
+  const k = e.key;
+  if(k === '='){ e.preventDefault(); await mark('qualified'); }
+  else if(k === '-'){ e.preventDefault(); await mark('unqualified'); }
+  else if(k === 'ArrowRight' || k === 'ArrowDown'){ e.preventDefault(); await goGroup(1); }
+  else if(k === 'ArrowLeft' || k === 'ArrowUp'){ e.preventDefault(); await goGroup(-1); }
+  else if(k === 'n' || k === 'N'){ e.preventDefault(); await goNextTodo(); }
+  else if(k === 's' || k === 'S'){ e.preventDefault(); setCompareMode(state.compareMode==='slider'?'side':'slider'); }
+  else if(k === 'f' || k === 'F'){ e.preventDefault(); resetZoom(); }
+  else if(k === '?'){ e.preventDefault(); $('helpModal').classList.toggle('hidden'); }
+  else if(k === 'Escape'){ $('helpModal').classList.add('hidden'); }
+  else if(k === ' ' || e.code === 'Space'){
+    e.preventDefault();
+    if(state.compareMode==='slider'){ state.sliderPct = state.sliderToggleRight ? 0 : 100; state.sliderToggleRight = !state.sliderToggleRight; renderCompare(); }
   }
-  else if(e.key === 'Tab'){ e.preventDefault(); const g=currentGroup(); if(!g || !g.effects.length) return; state.effectIndex = (state.effectIndex + 1) % g.effects.length; await persistView(); renderAll(); }
-  else if(['1','2','3'].includes(e.key)){ const idx = Number(e.key)-1; const g=currentGroup(); if(g && idx < g.effects.length){ e.preventDefault(); state.effectIndex = idx; await persistView(); renderAll(); } }
+  else if(k === 'Tab'){ e.preventDefault(); const g=currentGroup(); if(!g || !g.effects.length) return; state.effectIndex = (state.effectIndex+1) % g.effects.length; await persistView(); renderAll(); }
+  else if(['1','2','3','4','5','6','7','8','9'].includes(k)){ const idx = Number(k)-1; const g=currentGroup(); if(g && idx < g.effects.length){ e.preventDefault(); state.effectIndex = idx; await persistView(); renderAll(); } }
 }, true);
-document.getElementById('slider').addEventListener('keydown', (e)=>{
-  if(['ArrowLeft','ArrowRight','ArrowUp','ArrowDown',' ','Spacebar','=','-'].includes(e.key) || e.code === 'Space') e.preventDefault();
+
+/* ---------- wiring ---------- */
+$('modeServerBtn').onclick = ()=>setMode('server-path');
+$('modeLocalBtn').onclick = ()=>setMode('browser-local');
+$('addEffectBtn').onclick = ()=>{ const vals=getEffectDirs(); vals.push(''); renderEffectInputs(vals); };
+$('addLocalEffectBtn').onclick = ()=> renderLocalEffectInputs(document.querySelectorAll('#localEffectInputs input[type=file]').length + 1);
+$('loadBtn').onclick = ()=>loadServerSession().catch(err=>toast(err.message,'bad'));
+$('loadLocalBtn').onclick = ()=>loadLocalSession().catch(err=>toast(err.message,'bad'));
+$('reloadRecentBtn').onclick = ()=>loadRecent().catch(()=>{});
+$('markGoodBtn').onclick = ()=>mark('qualified').catch(err=>toast(err.message,'bad'));
+$('markBadBtn').onclick = ()=>mark('unqualified').catch(err=>toast(err.message,'bad'));
+$('prevBtn').onclick = ()=>goGroup(-1).catch(err=>toast(err.message,'bad'));
+$('nextBtn').onclick = ()=>goGroup(1).catch(err=>toast(err.message,'bad'));
+$('nextTodoBtn').onclick = ()=>goNextTodo().catch(err=>toast(err.message,'bad'));
+$('modeSliderSeg').onclick = ()=>setCompareMode('slider');
+$('modeSideSeg').onclick = ()=>setCompareMode('side');
+$('zoomInBtn').onclick = ()=>{ state.zoom.scale = Math.min(8, state.zoom.scale*1.25); applyZoom(); };
+$('zoomOutBtn').onclick = ()=>{ state.zoom.scale = Math.max(1, state.zoom.scale/1.25); if(state.zoom.scale===1){ state.zoom.x=0; state.zoom.y=0; } applyZoom(); };
+$('zoomResetBtn').onclick = resetZoom;
+$('exportQualifiedBtn').onclick = ()=>exportData('qualified').catch(err=>toast(err.message,'bad'));
+$('exportUnqualifiedBtn').onclick = ()=>exportData('unqualified').catch(err=>toast(err.message,'bad'));
+$('exportSummaryBtn').onclick = ()=>exportData('summary').catch(err=>toast(err.message,'bad'));
+$('helpBtn').onclick = ()=> $('helpModal').classList.remove('hidden');
+$('helpClose').onclick = ()=> $('helpModal').classList.add('hidden');
+$('helpModal').onclick = (e)=>{ if(e.target.id==='helpModal') $('helpModal').classList.add('hidden'); };
+$('groupSearch').oninput = (e)=>{ state.search = e.target.value; renderGroupNav(); };
+document.querySelectorAll('.chip[data-filter]').forEach(chip => chip.onclick = ()=>{
+  state.filter = chip.dataset.filter;
+  document.querySelectorAll('.chip[data-filter]').forEach(c=>c.classList.toggle('active', c===chip));
+  renderGroupNav();
 });
-document.getElementById('slider').addEventListener('pointerup', ()=>{ document.body.focus?.(); });
-document.getElementById('slider').addEventListener('click', ()=>{ document.body.focus?.(); });
-document.getElementById('modeServerBtn').onclick = ()=>setMode('server-path');
-document.getElementById('modeLocalBtn').onclick = ()=>setMode('browser-local');
-document.getElementById('addEffectBtn').onclick = ()=>{ const vals=getEffectDirs(); vals.push(''); renderEffectInputs(vals); };
-document.getElementById('addLocalEffectBtn').onclick = ()=> renderLocalEffectInputs(document.querySelectorAll('#localEffectInputs input[type=file]').length + 1);
-document.getElementById('loadBtn').onclick = ()=>loadServerSession().catch(err=>alert(err.message));
-document.getElementById('loadLocalBtn').onclick = ()=>loadLocalSession().catch(err=>alert(err.message));
-document.getElementById('reloadRecentBtn').onclick = loadRecent;
-document.getElementById('markGoodBtn').onclick = ()=>mark('qualified');
-document.getElementById('markBadBtn').onclick = ()=>mark('unqualified');
-document.getElementById('prevBtn').onclick = ()=>goGroup(-1);
-document.getElementById('nextBtn').onclick = ()=>goGroup(1);
-document.getElementById('slider').oninput = () => { renderCompare(); };
-document.getElementById('overlayToggle').onchange = renderCompare;
-document.getElementById('exportQualifiedBtn').onclick = ()=>exportData('qualified');
-document.getElementById('exportUnqualifiedBtn').onclick = ()=>exportData('unqualified');
-document.getElementById('exportSummaryBtn').onclick = ()=>exportData('summary');
-renderEffectInputs(['']); renderLocalEffectInputs(1); loadRecent(); setSaveStatus('未保存');
+
+setupZoomPan(); setupSliderHandle();
+renderEffectInputs(['']); renderLocalEffectInputs(1); loadRecent().catch(()=>{});
 </script>
 </body></html>
 '''
