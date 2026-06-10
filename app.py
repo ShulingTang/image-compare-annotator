@@ -5,6 +5,7 @@ import io
 import json
 import mimetypes
 import os
+import shutil
 from pathlib import Path
 from urllib.parse import unquote, urlparse, parse_qs
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
@@ -521,6 +522,17 @@ input[type="file"]::file-selector-button{ font-family:inherit; margin-right:10px
 .missing-box{ display:flex; align-items:center; justify-content:center; color:var(--dim); font-size:13px;
   width:240px; height:160px; border:1px dashed var(--border-strong); border-radius:var(--radius-sm); }
 
+/* diff mode */
+.diff-stage{ position:relative; display:flex; align-items:center; justify-content:center; }
+.diff-stage canvas{ max-width:min(1600px, calc(100vw - 420px)); max-height:calc(100vh - 240px); object-fit:contain;
+  image-rendering:pixelated; cursor:grab; will-change:transform; }
+.diff-stage canvas.panning{ cursor:grabbing; }
+
+/* magnifier loupe */
+.loupe{ position:absolute; width:184px; height:184px; border-radius:99px; border:3px solid #fff; pointer-events:none; z-index:20;
+  box-shadow:0 8px 28px rgba(0,0,0,.6), inset 0 0 0 1px rgba(0,0,0,.3); background:#0c0f16 no-repeat; image-rendering:auto; }
+input[type="range"]{ accent-color:var(--accent); height:18px; cursor:pointer; }
+
 /* ---------- Thumbnails ---------- */
 .thumbs{ display:flex; gap:10px; overflow-x:auto; padding-bottom:4px; flex:0 0 auto; }
 .thumb{ position:relative; min-width:158px; width:158px; background:var(--surface); border:2px solid var(--border-strong);
@@ -647,6 +659,9 @@ kbd{ font-family:var(--font); background:#0c0f16; border:1px solid var(--border-
         <button id="exportUnqualifiedBtn" class="btn ghost sm" style="flex:1;">不合格名单</button>
       </div>
       <button id="exportSummaryBtn" class="btn ghost sm block">导出汇总 JSON</button>
+      <button id="exportCsvBtn" class="btn ghost sm block" style="margin-top:8px;">导出 CSV 表格</button>
+      <button id="sortFilesBtn" class="btn ghost sm block" style="margin-top:8px;">按结果分拣文件</button>
+      <div class="hint" style="margin-top:8px;">分拣会把已标注的效果图复制到 <code style="color:var(--muted)">数据集_sorted/</code> 下的 qualified / unqualified 子目录（仅服务端目录模式）。</div>
     </div>
 
     <div class="card tight">
@@ -669,11 +684,17 @@ kbd{ font-family:var(--font); background:#0c0f16; border:1px solid var(--border-
       <div class="tgroup">
         <button id="markGoodBtn" class="btn good sm" title="标合格 (=)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>合格</button>
         <button id="markBadBtn" class="btn bad sm" title="标不合格 (-)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>不合格</button>
+        <button id="undoBtn" class="btn ghost icon" title="撤销上一步 (U)" disabled><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7v6h6"/><path d="M3 13a9 9 0 1 0 3-7.7L3 8"/></svg></button>
       </div>
       <div class="divider"></div>
       <div class="segmented">
         <button id="modeSliderSeg" class="seg active" title="滑块叠加对比"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M12 3v18"/></svg>滑块</button>
         <button id="modeSideSeg" class="seg" title="并排对比"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="18" rx="1.5"/><rect x="14" y="3" width="7" height="18" rx="1.5"/></svg>并排</button>
+        <button id="modeDiffSeg" class="seg" title="像素差异高亮"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 3a9 9 0 0 1 0 18z" fill="currentColor"/></svg>差异</button>
+      </div>
+      <div class="tgroup hidden" id="diffControls">
+        <span class="zoom-level" style="min-width:auto; color:var(--muted);">灵敏度</span>
+        <input id="diffThreshold" type="range" min="2" max="120" value="30" style="width:108px;" />
       </div>
       <div class="divider"></div>
       <div class="tgroup">
@@ -681,6 +702,7 @@ kbd{ font-family:var(--font); background:#0c0f16; border:1px solid var(--border-
         <span id="zoomLevel" class="zoom-level">100%</span>
         <button id="zoomInBtn" class="btn ghost icon" title="放大"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/><path d="M11 8v6"/><path d="M8 11h6"/></svg></button>
         <button id="zoomResetBtn" class="btn ghost icon" title="重置视图 (F)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/></svg></button>
+        <button id="loupeBtn" class="btn ghost icon" title="放大镜 (L)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/><path d="M11 8v6"/><path d="M8 11h6"/></svg></button>
       </div>
       <div class="group-title" id="groupTitle">未加载</div>
     </div>
@@ -713,6 +735,15 @@ kbd{ font-family:var(--font); background:#0c0f16; border:1px solid var(--border-
             <div class="pane-img" id="sideEffPane"></div>
           </div>
         </div>
+
+        <!-- diff mode -->
+        <div id="diffStage" class="diff-stage hidden">
+          <span class="side-tag l" style="color:#fca5a5;">红色 = 差异区域</span>
+          <canvas id="diffCanvas" class="ztrans"></canvas>
+          <div id="diffMsg" class="hint hidden">缺少原图或效果图，无法计算差异</div>
+        </div>
+
+        <div id="loupe" class="loupe hidden"></div>
       </div>
       <div class="thumbs" id="thumbs"></div>
     </div>
@@ -728,10 +759,12 @@ kbd{ font-family:var(--font); background:#0c0f16; border:1px solid var(--border-
     <div class="kbd-row"><span>标不合格</span><span class="keys"><kbd>-</kbd></span></div>
     <div class="kbd-row"><span>上一组 / 下一组</span><span class="keys"><kbd>←</kbd><kbd>↑</kbd> / <kbd>→</kbd><kbd>↓</kbd></span></div>
     <div class="kbd-row"><span>跳到下一个未完成</span><span class="keys"><kbd>N</kbd></span></div>
+    <div class="kbd-row"><span>撤销上一步</span><span class="keys"><kbd>U</kbd> / <kbd>Ctrl</kbd><kbd>Z</kbd></span></div>
     <div class="kbd-row"><span>选择第 1/2/3 列</span><span class="keys"><kbd>1</kbd><kbd>2</kbd><kbd>3</kbd></span></div>
     <div class="kbd-row"><span>逐列切换</span><span class="keys"><kbd>Tab</kbd></span></div>
     <div class="kbd-row"><span>滑块快速翻转 (原图↔效果)</span><span class="keys"><kbd>Space</kbd></span></div>
-    <div class="kbd-row"><span>切换滑块 / 并排模式</span><span class="keys"><kbd>S</kbd></span></div>
+    <div class="kbd-row"><span>循环 滑块 / 并排 / 差异 模式</span><span class="keys"><kbd>S</kbd></span></div>
+    <div class="kbd-row"><span>放大镜开关</span><span class="keys"><kbd>L</kbd></span></div>
     <div class="kbd-row"><span>重置缩放/平移</span><span class="keys"><kbd>F</kbd></span></div>
     <div class="kbd-row"><span>滚轮缩放 · 拖拽平移</span><span class="hint">在图片区域</span></div>
   </div>
@@ -744,7 +777,9 @@ const SVG = {
   info:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>'
 };
 const state = { session:null, groupIndex:0, effectIndex:0, mode:'server-path', localFiles:new Map(), objUrls:new Map(),
-  compareMode:'slider', sliderPct:50, sliderToggleRight:false, zoom:{scale:1,x:0,y:0}, filter:'all', search:'', busy:0 };
+  compareMode:'slider', sliderPct:50, sliderToggleRight:false, zoom:{scale:1,x:0,y:0}, filter:'all', search:'', busy:0,
+  undoStack:[], loupe:false, diffThreshold:30 };
+const diffCache = { key:null, raw:null, eff:null, w:0, h:0 };
 
 const $ = (id) => document.getElementById(id);
 
@@ -925,15 +960,16 @@ function applyBorder(label){
 }
 function renderCompare(){
   const group = currentGroup(); const effect = currentEffect();
-  const empty = $('emptyState'), slider = $('sliderStage'), side = $('sideStage');
-  if(!group || !effect){ empty.classList.remove('hidden'); slider.classList.add('hidden'); side.classList.add('hidden'); return; }
+  const empty = $('emptyState'), slider = $('sliderStage'), side = $('sideStage'), diff = $('diffStage');
+  const hideAll = ()=>{ slider.classList.add('hidden'); side.classList.add('hidden'); diff.classList.add('hidden'); };
+  if(!group || !effect){ empty.classList.remove('hidden'); hideAll(); return; }
   const rawSrc = getRawSrc(group); const effSrc = getEffectSrc(effect);
-  if(!rawSrc && !effSrc){ empty.classList.remove('hidden'); slider.classList.add('hidden'); side.classList.add('hidden'); return; }
+  if(!rawSrc && !effSrc){ empty.classList.remove('hidden'); hideAll(); return; }
   empty.classList.add('hidden');
   const effLabel = state.session.effect_dirs?.[state.effectIndex] || `效果图 ${state.effectIndex+1}`;
 
   if(state.compareMode === 'slider'){
-    side.classList.add('hidden'); slider.classList.remove('hidden');
+    side.classList.add('hidden'); diff.classList.add('hidden'); slider.classList.remove('hidden');
     slider.classList.add('ztrans');
     const raw = $('rawImage'), eff = $('effImage');
     raw.src = rawSrc || effSrc; eff.src = effSrc || rawSrc;
@@ -943,17 +979,65 @@ function renderCompare(){
     $('sliderHandle').style.left = pct + '%';
     $('sliderHandle').style.display = effSrc ? 'block' : 'none';
     slider.querySelector('.side-tag.r').textContent = effLabel;
-  } else {
-    slider.classList.remove('hidden','ztrans'); slider.classList.add('hidden');
+  } else if(state.compareMode === 'side'){
+    slider.classList.remove('ztrans'); slider.classList.add('hidden'); diff.classList.add('hidden');
     side.classList.remove('hidden');
     $('sideEffLabel').textContent = effLabel;
     const rawPane = $('sideRawPane'), effPane = $('sideEffPane');
     rawPane.className = 'pane-img ztrans'; effPane.className = 'pane-img ztrans';
     rawPane.innerHTML = rawSrc ? `<img src="${rawSrc}">` : '<div class="missing-box">原图缺失</div>';
     effPane.innerHTML = effSrc ? `<img src="${effSrc}">` : '<div class="missing-box">效果图缺失</div>';
+  } else {
+    slider.classList.remove('ztrans'); slider.classList.add('hidden'); side.classList.add('hidden');
+    diff.classList.remove('hidden');
+    computeDiff(rawSrc, effSrc).catch(()=>{});
   }
   applyZoom();
   applyBorder(effect.label);
+}
+
+/* ---------- pixel diff (client-side canvas) ---------- */
+function loadImg(src){ return new Promise((res, rej)=>{ const im = new Image(); im.onload = ()=>res(im); im.onerror = rej; im.src = src; }); }
+async function computeDiff(rawSrc, effSrc){
+  const canvas = $('diffCanvas'), msg = $('diffMsg');
+  if(!rawSrc || !effSrc){ canvas.classList.add('hidden'); msg.classList.remove('hidden'); return; }
+  canvas.classList.remove('hidden'); msg.classList.add('hidden');
+  const key = rawSrc + '|' + effSrc;
+  if(diffCache.key !== key){
+    const [ri, ei] = await Promise.all([loadImg(rawSrc), loadImg(effSrc)]);
+    const w = ei.naturalWidth || ei.width, h = ei.naturalHeight || ei.height;
+    const c1 = document.createElement('canvas'); c1.width = w; c1.height = h;
+    const c2 = document.createElement('canvas'); c2.width = w; c2.height = h;
+    c1.getContext('2d').drawImage(ri, 0, 0, w, h);
+    c2.getContext('2d').drawImage(ei, 0, 0, w, h);
+    diffCache.key = key;
+    diffCache.raw = c1.getContext('2d').getImageData(0, 0, w, h);
+    diffCache.eff = c2.getContext('2d').getImageData(0, 0, w, h);
+    diffCache.w = w; diffCache.h = h;
+  }
+  paintDiff();
+}
+function paintDiff(){
+  if(!diffCache.w) return;
+  const { raw, eff, w, h } = diffCache;
+  const canvas = $('diffCanvas'); canvas.width = w; canvas.height = h;
+  const ctx = canvas.getContext('2d');
+  const out = ctx.createImageData(w, h);
+  const a = raw.data, b = eff.data, o = out.data;
+  const th = state.diffThreshold * 3;
+  let diffPixels = 0;
+  for(let i=0; i<a.length; i+=4){
+    const d = Math.abs(a[i]-b[i]) + Math.abs(a[i+1]-b[i+1]) + Math.abs(a[i+2]-b[i+2]);
+    if(d > th){
+      o[i]=255; o[i+1]=42; o[i+2]=42; o[i+3]=255; diffPixels++;
+    } else {
+      const gray = (b[i]*0.299 + b[i+1]*0.587 + b[i+2]*0.114) * 0.42;
+      o[i]=gray; o[i+1]=gray; o[i+2]=gray; o[i+3]=255;
+    }
+  }
+  ctx.putImageData(out, 0, 0);
+  const pct = ((diffPixels/(w*h))*100).toFixed(2);
+  $('diffStage').querySelector('.side-tag.l').textContent = `差异 ${pct}%`;
 }
 function renderAll(){ renderStats(); renderGroupTitle(); renderGroupNav(); renderThumbs(); renderCompare(); }
 
@@ -972,7 +1056,7 @@ async function loadServerSession(){
   if(!raw_dir) throw new Error('请填写原图目录');
   const effect_dirs = getEffectDirs();
   const data = await api('/api/load', { method:'POST', body: JSON.stringify({ mode:'server-path', raw_dir, effect_dirs }) });
-  state.session = data; syncIndexFromSession(data); resetZoom(); renderAll(); await loadRecent();
+  state.session = data; state.undoStack = []; $('undoBtn').disabled = true; syncIndexFromSession(data); resetZoom(); renderAll(); await loadRecent();
   toast(`已加载 ${data.groups.length} 组图片`, 'good');
 }
 function collectFiles(fileList, prefix){
@@ -993,11 +1077,32 @@ async function loadLocalSession(){
   const imp = $('importAnnotationInput').files?.[0];
   if(imp) imported_annotation = JSON.parse(await imp.text());
   const data = await api('/api/load', { method:'POST', body: JSON.stringify({ mode:'browser-local', dataset_name: rawInput.files[0].webkitRelativePath?.split('/')[0] || 'browser-local', raw_files, effect_dirs, imported_annotation }) });
-  state.session = data; syncIndexFromSession(data); resetZoom(); renderAll(); await loadRecent();
+  state.session = data; state.undoStack = []; $('undoBtn').disabled = true; syncIndexFromSession(data); resetZoom(); renderAll(); await loadRecent();
   toast(`已加载 ${data.groups.length} 组本地图片`, 'good');
+}
+function snapshotRecord(group){
+  const effects = {};
+  group.effects.forEach((e, i) => { if(e.label==='qualified' || e.label==='unqualified') effects[String(i)] = e.label; });
+  return { effects, finalized: !!group.finalized };
+}
+function pushUndo(group){
+  state.undoStack.push({ group_name: group.name, record: snapshotRecord(group), group_index: state.groupIndex, effect_index: state.effectIndex });
+  if(state.undoStack.length > 50) state.undoStack.shift();
+  $('undoBtn').disabled = false;
+}
+async function undo(){
+  if(!state.session || !state.undoStack.length){ toast('没有可撤销的操作', 'info'); return; }
+  const entry = state.undoStack.pop();
+  const data = await api('/api/restore', { method:'POST', body: JSON.stringify({ mode: state.session.mode, dataset_key: state.session.mode === 'browser-local' ? state.session.dataset_id : state.session.raw_dir, group_name: entry.group_name, record: entry.record, group_index: entry.group_index, effect_index: entry.effect_index }) });
+  state.session = data;
+  state.groupIndex = Math.min(entry.group_index, Math.max(data.groups.length-1, 0));
+  state.effectIndex = entry.effect_index;
+  $('undoBtn').disabled = state.undoStack.length === 0;
+  renderAll(); toast('已撤销', 'info');
 }
 async function mark(label){
   const g = currentGroup(); const e = currentEffect(); if(!g || !e) return;
+  pushUndo(g);
   const data = await api('/api/mark', { method:'POST', body: JSON.stringify({ mode: state.session.mode, dataset_key: state.session.mode === 'browser-local' ? state.session.dataset_id : state.session.raw_dir, group_name:g.name, effect_index:state.effectIndex, label, group_index:state.groupIndex }) });
   state.session = data; renderAll();
   toast(label==='qualified' ? '已标记为合格' : '已标记为不合格', label==='qualified' ? 'good' : 'bad');
@@ -1007,6 +1112,7 @@ async function commitCurrentGroup(){
   if(group && group.effects.length > 1){
     const anyMarked = group.effects.some(x => x.label==='qualified' || x.label==='unqualified');
     if(anyMarked && !group.finalized){
+      pushUndo(group);
       state.session = await api('/api/finalize', { method:'POST', body: JSON.stringify({ mode: state.session.mode, dataset_key: state.session.mode === 'browser-local' ? state.session.dataset_id : state.session.raw_dir, group_name: group.name, selected_index: state.effectIndex, group_index: state.groupIndex }) });
     }
   }
@@ -1043,8 +1149,23 @@ async function exportData(kind){
   const data = await api('/api/export', { method:'POST', body: JSON.stringify({ mode: state.session.mode, dataset_key: state.session.mode === 'browser-local' ? state.session.dataset_id : state.session.raw_dir }) });
   if(kind==='qualified') downloadBlob(`${data.dataset_name || 'dataset'}-qualified.txt`, data.qualified_names.join('\n'), 'text/plain;charset=utf-8');
   else if(kind==='unqualified') downloadBlob(`${data.dataset_name || 'dataset'}-unqualified.txt`, data.unqualified_names.join('\n'), 'text/plain;charset=utf-8');
+  else if(kind==='csv'){
+    const esc = (v)=>{ const s = String(v ?? ''); return /[",\n]/.test(s) ? '"'+s.replace(/"/g,'""')+'"' : s; };
+    const labelCn = { qualified:'合格', unqualified:'不合格' };
+    const lines = ['组名,列,结果'];
+    (data.records || []).forEach(r => lines.push([esc(r.group_name), esc('col'+(r.effect_index+1)), esc(labelCn[r.label] || r.label)].join(',')));
+    downloadBlob(`${data.dataset_name || 'dataset'}-annotations.csv`, '﻿' + lines.join('\r\n'), 'text/csv;charset=utf-8');
+  }
   else downloadBlob(`${data.dataset_name || 'dataset'}-summary.json`, JSON.stringify(data, null, 2), 'application/json;charset=utf-8');
   toast('已导出', 'good');
+}
+async function sortFiles(){
+  if(!state.session){ toast('请先加载数据', 'info'); return; }
+  if(state.session.mode === 'browser-local'){ toast('本地模式图片不在服务端，无法分拣', 'info'); return; }
+  if(!window.confirm('将把已标注的效果图复制到「数据集_sorted」目录下的 qualified / unqualified 子目录，是否继续？')) return;
+  const data = await api('/api/sort_files', { method:'POST', body: JSON.stringify({ mode: state.session.mode, dataset_key: state.session.raw_dir }) });
+  const c = data.counts || {};
+  toast(`已分拣：合格 ${c.qualified||0}、不合格 ${c.unqualified||0}${c.missing?`，缺失 ${c.missing}`:''}`, 'good');
 }
 
 /* ---------- zoom & pan ---------- */
@@ -1076,13 +1197,55 @@ function setupZoomPan(){
     t.classList.add('panning'); wrap.setPointerCapture(e.pointerId);
   });
   wrap.addEventListener('pointermove', (e)=>{
-    if(!panning) return;
-    state.zoom.x = ox + (e.clientX - sx); state.zoom.y = oy + (e.clientY - sy); applyZoom();
+    if(panning){ state.zoom.x = ox + (e.clientX - sx); state.zoom.y = oy + (e.clientY - sy); applyZoom(); }
+    if(state.loupe && !panning) updateLoupe(e);
   });
   const endPan = ()=>{ if(panning){ panning=false; document.querySelectorAll('.panning').forEach(el=>el.classList.remove('panning')); } };
   wrap.addEventListener('pointerup', endPan);
   wrap.addEventListener('pointercancel', endPan);
+  wrap.addEventListener('pointerleave', ()=> $('loupe').classList.add('hidden'));
   wrap.addEventListener('dblclick', ()=>{ if(state.session) resetZoom(); });
+}
+
+/* ---------- magnifier loupe ---------- */
+const LOUPE_SIZE = 184, LOUPE_ZOOM = 2.6;
+function updateLoupe(e){
+  const loupe = $('loupe');
+  if(!state.loupe || !state.session || state.compareMode === 'diff'){ loupe.classList.add('hidden'); return; }
+  let img = null, src = null;
+  if(state.compareMode === 'slider'){
+    const stage = $('sliderStage'); const r = stage.getBoundingClientRect();
+    if(e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom){ loupe.classList.add('hidden'); return; }
+    const frac = (e.clientX - r.left) / r.width * 100;
+    img = (frac < state.sliderPct) ? $('rawImage') : $('effImage');
+    src = img.src;
+  } else {
+    img = e.target.closest('.pane-img')?.querySelector('img');
+    if(!img){ loupe.classList.add('hidden'); return; }
+    src = img.src;
+  }
+  if(!src){ loupe.classList.add('hidden'); return; }
+  const ir = img.getBoundingClientRect();
+  if(e.clientX < ir.left || e.clientX > ir.right || e.clientY < ir.top || e.clientY > ir.bottom){ loupe.classList.add('hidden'); return; }
+  const fx = (e.clientX - ir.left) / ir.width, fy = (e.clientY - ir.top) / ir.height;
+  const bgW = ir.width * LOUPE_ZOOM, bgH = ir.height * LOUPE_ZOOM;
+  loupe.classList.remove('hidden');
+  loupe.style.backgroundImage = `url("${src}")`;
+  loupe.style.backgroundSize = `${bgW}px ${bgH}px`;
+  loupe.style.backgroundPosition = `${LOUPE_SIZE/2 - fx*bgW}px ${LOUPE_SIZE/2 - fy*bgH}px`;
+  const wrapR = $('stageWrap').getBoundingClientRect();
+  let lx = e.clientX - wrapR.left + 24, ly = e.clientY - wrapR.top - LOUPE_SIZE - 12;
+  if(lx + LOUPE_SIZE > wrapR.width) lx = e.clientX - wrapR.left - LOUPE_SIZE - 24;
+  if(ly < 0) ly = e.clientY - wrapR.top + 24;
+  loupe.style.left = lx + 'px'; loupe.style.top = ly + 'px';
+}
+function setLoupe(on){
+  state.loupe = on;
+  $('loupeBtn').classList.toggle('active', on);
+  $('loupeBtn').style.background = on ? 'var(--accent-soft)' : '';
+  $('loupeBtn').style.color = on ? '#c7ceff' : '';
+  if(!on) $('loupe').classList.add('hidden');
+  if(on && state.compareMode === 'diff') toast('差异模式下放大镜不可用', 'info');
 }
 
 /* ---------- slider handle drag ---------- */
@@ -1106,6 +1269,9 @@ function setCompareMode(mode){
   state.compareMode = mode;
   $('modeSliderSeg').classList.toggle('active', mode==='slider');
   $('modeSideSeg').classList.toggle('active', mode==='side');
+  $('modeDiffSeg').classList.toggle('active', mode==='diff');
+  $('diffControls').classList.toggle('hidden', mode!=='diff');
+  if(mode==='diff') $('loupe').classList.add('hidden');
   resetZoom(); renderCompare();
 }
 
@@ -1121,7 +1287,9 @@ window.addEventListener('keydown', async (e)=>{
   else if(k === 'ArrowRight' || k === 'ArrowDown'){ e.preventDefault(); await goGroup(1); }
   else if(k === 'ArrowLeft' || k === 'ArrowUp'){ e.preventDefault(); await goGroup(-1); }
   else if(k === 'n' || k === 'N'){ e.preventDefault(); await goNextTodo(); }
-  else if(k === 's' || k === 'S'){ e.preventDefault(); setCompareMode(state.compareMode==='slider'?'side':'slider'); }
+  else if(k === 'u' || k === 'U' || ((e.ctrlKey||e.metaKey) && (k==='z'||k==='Z'))){ e.preventDefault(); await undo(); }
+  else if(k === 's' || k === 'S'){ e.preventDefault(); const order=['slider','side','diff']; setCompareMode(order[(order.indexOf(state.compareMode)+1)%order.length]); }
+  else if(k === 'l' || k === 'L'){ e.preventDefault(); setLoupe(!state.loupe); }
   else if(k === 'f' || k === 'F'){ e.preventDefault(); resetZoom(); }
   else if(k === '?'){ e.preventDefault(); $('helpModal').classList.toggle('hidden'); }
   else if(k === 'Escape'){ $('helpModal').classList.add('hidden'); }
@@ -1146,14 +1314,20 @@ $('markBadBtn').onclick = ()=>mark('unqualified').catch(err=>toast(err.message,'
 $('prevBtn').onclick = ()=>goGroup(-1).catch(err=>toast(err.message,'bad'));
 $('nextBtn').onclick = ()=>goGroup(1).catch(err=>toast(err.message,'bad'));
 $('nextTodoBtn').onclick = ()=>goNextTodo().catch(err=>toast(err.message,'bad'));
+$('undoBtn').onclick = ()=>undo().catch(err=>toast(err.message,'bad'));
 $('modeSliderSeg').onclick = ()=>setCompareMode('slider');
 $('modeSideSeg').onclick = ()=>setCompareMode('side');
+$('modeDiffSeg').onclick = ()=>setCompareMode('diff');
+$('diffThreshold').oninput = (e)=>{ state.diffThreshold = Number(e.target.value); if(state.compareMode==='diff') paintDiff(); };
+$('loupeBtn').onclick = ()=>setLoupe(!state.loupe);
 $('zoomInBtn').onclick = ()=>{ state.zoom.scale = Math.min(8, state.zoom.scale*1.25); applyZoom(); };
 $('zoomOutBtn').onclick = ()=>{ state.zoom.scale = Math.max(1, state.zoom.scale/1.25); if(state.zoom.scale===1){ state.zoom.x=0; state.zoom.y=0; } applyZoom(); };
 $('zoomResetBtn').onclick = resetZoom;
 $('exportQualifiedBtn').onclick = ()=>exportData('qualified').catch(err=>toast(err.message,'bad'));
 $('exportUnqualifiedBtn').onclick = ()=>exportData('unqualified').catch(err=>toast(err.message,'bad'));
 $('exportSummaryBtn').onclick = ()=>exportData('summary').catch(err=>toast(err.message,'bad'));
+$('exportCsvBtn').onclick = ()=>exportData('csv').catch(err=>toast(err.message,'bad'));
+$('sortFilesBtn').onclick = ()=>sortFiles().catch(err=>toast(err.message,'bad'));
 $('helpBtn').onclick = ()=> $('helpModal').classList.remove('hidden');
 $('helpClose').onclick = ()=> $('helpModal').classList.add('hidden');
 $('helpModal').onclick = (e)=>{ if(e.target.id==='helpModal') $('helpModal').classList.add('hidden'); };
@@ -1254,7 +1428,35 @@ class Handler(BaseHTTPRequestHandler):
                         "imported_annotation": ann,
                     }))
                 return self._json(build_path_session(data["raw_dir"], data.get("effect_dirs", [])))
-            if parsed.path in {"/api/mark", "/api/finalize", "/api/view", "/api/export"}:
+            if parsed.path == "/api/sort_files":
+                mode = data.get("mode", "server-path")
+                if mode != "server-path":
+                    return self._json({"error": "仅服务端目录模式支持分拣文件（本地模式图片不在服务端）"}, 400)
+                dataset_key = data.get("dataset_key")
+                ann, _ = load_annotation_for_path(dataset_key)
+                effect_dirs = ann.get("effect_dirs", [])
+                effect_maps = [stem_map(Path(p)) for p in effect_dirs]
+                raw_dir = Path(dataset_key)
+                dataset_name = ann.get("dataset_name") or raw_dir.name
+                out_base = raw_dir.parent / f"{dataset_name}_sorted"
+                counts = {"qualified": 0, "unqualified": 0, "missing": 0}
+                for group_name, rec in ann.get("records", {}).items():
+                    for k, v in rec.get("effects", {}).items():
+                        if v not in ("qualified", "unqualified"):
+                            continue
+                        idx = int(k)
+                        src = effect_maps[idx].get(group_name) if idx < len(effect_maps) else None
+                        if not src or not Path(src).exists():
+                            counts["missing"] += 1
+                            continue
+                        dst_dir = out_base / v
+                        dst_dir.mkdir(parents=True, exist_ok=True)
+                        ext = Path(src).suffix
+                        dst = dst_dir / f"{group_name}__col{idx+1}{ext}"
+                        shutil.copy2(src, dst)
+                        counts[v] += 1
+                return self._json({"output": str(out_base), "counts": counts})
+            if parsed.path in {"/api/mark", "/api/finalize", "/api/view", "/api/export", "/api/restore"}:
                 mode = data.get("mode", "server-path")
                 dataset_key = data.get("dataset_key")
                 ann, _ = load_annotation_by_mode(mode, dataset_key)
@@ -1278,6 +1480,15 @@ class Handler(BaseHTTPRequestHandler):
                         rec["finalized"] = True
                     ann["last_group_index"] = int(data.get("group_index", 0)) + 1
                     ann["last_selected_effect_index"] = 0
+                    save_annotation_by_mode(mode, dataset_key, ann)
+                elif parsed.path == "/api/restore":
+                    rec = data.get("record") or {"effects": {}, "finalized": False}
+                    ann["records"][data["group_name"]] = {
+                        "effects": dict(rec.get("effects", {})),
+                        "finalized": bool(rec.get("finalized", False)),
+                    }
+                    ann["last_group_index"] = int(data.get("group_index", 0))
+                    ann["last_selected_effect_index"] = int(data.get("effect_index", 0))
                     save_annotation_by_mode(mode, dataset_key, ann)
                 elif parsed.path == "/api/view":
                     ann["last_group_index"] = int(data.get("group_index", 0))
