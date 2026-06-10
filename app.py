@@ -743,7 +743,7 @@ const SVG = {
   x:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>',
   info:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>'
 };
-const state = { session:null, groupIndex:0, effectIndex:0, mode:'server-path', localFiles:new Map(),
+const state = { session:null, groupIndex:0, effectIndex:0, mode:'server-path', localFiles:new Map(), objUrls:new Map(),
   compareMode:'slider', sliderPct:50, sliderToggleRight:false, zoom:{scale:1,x:0,y:0}, filter:'all', search:'', busy:0 };
 
 const $ = (id) => document.getElementById(id);
@@ -882,8 +882,12 @@ function renderGroupNav(){
 }
 function fileUrl(key){
   if(!key) return null;
+  if(state.objUrls.has(key)) return state.objUrls.get(key);
   const file = state.localFiles.get(key);
-  return file ? URL.createObjectURL(file) : null;
+  if(!file) return null;
+  const url = URL.createObjectURL(file);
+  state.objUrls.set(key, url);
+  return url;
 }
 function getRawSrc(group){
   if(state.session.mode === 'browser-local') return fileUrl(group.raw_client_file_key);
@@ -979,7 +983,8 @@ function collectFiles(fileList, prefix){
 async function loadLocalSession(){
   const rawInput = $('rawFolderInput');
   if(!rawInput.files?.length) throw new Error('请先选择原图文件夹');
-  state.localFiles.clear();
+  state.objUrls.forEach(u => { try{ URL.revokeObjectURL(u); }catch(_){} });
+  state.objUrls.clear(); state.localFiles.clear();
   const raw_files = collectFiles(rawInput.files, 'raw');
   const effect_dirs = [];
   const localInputs = [...document.querySelectorAll('#localEffectInputs input[type=file]')];
@@ -1028,7 +1033,7 @@ async function goNextTodo(){
     const i = (state.groupIndex + off) % n;
     if(!isGroupDone(state.session.groups[i])){ await setGroupTo(i); toast('已跳到下一个未完成', 'info'); return; }
   }
-  toast('全部分组已完成 🎉'.replace('🎉',''), 'good');
+  toast('全部分组已完成', 'good');
 }
 
 /* ---------- export ---------- */
