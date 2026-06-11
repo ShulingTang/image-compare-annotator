@@ -778,10 +778,11 @@ const SVG = {
 };
 const state = { session:null, groupIndex:0, effectIndex:0, mode:'server-path', localFiles:new Map(), objUrls:new Map(),
   compareMode:'slider', sliderPct:50, sliderToggleRight:false, zoom:{scale:1,x:0,y:0}, filter:'all', search:'', busy:0,
-  undoStack:[], loupe:false, diffThreshold:30 };
+  undoStack:[], loupe:false, diffThreshold:30, busyAction:false };
 const diffCache = { key:null, raw:null, eff:null, w:0, h:0 };
 
 const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s==null?'':s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
 /* ---------- feedback ---------- */
 function toast(msg, type='info'){
@@ -805,7 +806,7 @@ function setMode(mode){
 function effectInput(idx, value=''){
   const wrap = document.createElement('div');
   wrap.className = 'field';
-  wrap.innerHTML = `<label class="lbl">效果图目录 ${idx+1}</label><div class="tgroup" style="gap:8px;"><input type="text" placeholder="/path/to/effect-${idx+1}" value="${value}"><button class="btn ghost icon" data-remove="${idx}" title="删除"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/></svg></button></div>`;
+  wrap.innerHTML = `<label class="lbl">效果图目录 ${idx+1}</label><div class="tgroup" style="gap:8px;"><input type="text" placeholder="/path/to/effect-${idx+1}" value="${esc(value)}"><button class="btn ghost icon" data-remove="${idx}" title="删除"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/></svg></button></div>`;
   return wrap;
 }
 function localEffectInput(idx){
@@ -844,7 +845,7 @@ async function loadRecent(){
     const b = document.createElement('button');
     b.className = 'list-item';
     const isLocal = item.mode === 'browser-local';
-    b.innerHTML = `<span class="tag">${isLocal?'本地':'目录'}</span><span class="nm">${item.label}</span>`;
+    b.innerHTML = `<span class="tag">${isLocal?'本地':'目录'}</span><span class="nm">${esc(item.label)}</span>`;
     b.onclick = ()=>{
       if(item.mode === 'server-path'){
         setMode('server-path');
@@ -886,7 +887,7 @@ function renderStats(){
 function renderGroupTitle(){
   const g = currentGroup();
   $('groupTitle').innerHTML = g
-    ? `<span>组 <b>${state.groupIndex+1}</b> / ${state.session.groups.length}</span><span>·</span><span title="${g.name}"><b>${g.name}</b></span>${g.effects.length>1?`<span>· 第 <b>${state.effectIndex+1}</b> 列</span>`:''}`
+    ? `<span>组 <b>${state.groupIndex+1}</b> / ${state.session.groups.length}</span><span>·</span><span title="${esc(g.name)}"><b>${esc(g.name)}</b></span>${g.effects.length>1?`<span>· 第 <b>${state.effectIndex+1}</b> 列</span>`:''}`
     : '未加载';
 }
 function renderGroupNav(){
@@ -909,7 +910,7 @@ function renderGroupNav(){
     b.className = `list-item ${i===state.groupIndex?'active':''}`;
     const st = done ? '<span class="badge good" style="padding:1px 6px;"><span class="dot"></span></span>'
                     : '<span class="badge none" style="padding:1px 6px;">·</span>';
-    b.innerHTML = `<span class="idx">${i+1}</span><span class="nm">${g.name}</span>${st}`;
+    b.innerHTML = `<span class="idx">${i+1}</span><span class="nm">${esc(g.name)}</span>${st}`;
     b.onclick = ()=> setGroupTo(i);
     box.appendChild(b);
   });
@@ -941,7 +942,7 @@ function renderThumbs(){
     div.className = `thumb ${idx===state.effectIndex?'active':''} ${ef.label==='qualified'?'good':''} ${ef.label==='unqualified'?'bad':''}`;
     div.innerHTML = `${src ? `<img class="pic" src="${src}">` : `<div class="missing">缺失</div>`}`
       + `<div class="col-no"><span>列 ${idx+1}</span>${badge(ef.label)}</div>`
-      + `<div class="fn">${ef.display_name || '无对应文件'}</div>`;
+      + `<div class="fn">${ef.display_name ? esc(ef.display_name) : '无对应文件'}</div>`;
     div.onclick = async ()=>{ state.effectIndex = idx; await persistView(); renderAll(); };
     thumbs.appendChild(div);
   });
@@ -1092,20 +1093,26 @@ function pushUndo(group){
 }
 async function undo(){
   if(!state.session || !state.undoStack.length){ toast('没有可撤销的操作', 'info'); return; }
-  const entry = state.undoStack.pop();
-  const data = await api('/api/restore', { method:'POST', body: JSON.stringify({ mode: state.session.mode, dataset_key: state.session.mode === 'browser-local' ? state.session.dataset_id : state.session.raw_dir, group_name: entry.group_name, record: entry.record, group_index: entry.group_index, effect_index: entry.effect_index }) });
-  state.session = data;
-  state.groupIndex = Math.min(entry.group_index, Math.max(data.groups.length-1, 0));
-  state.effectIndex = entry.effect_index;
-  $('undoBtn').disabled = state.undoStack.length === 0;
-  renderAll(); toast('已撤销', 'info');
+  if(state.busyAction) return; state.busyAction = true;
+  try{
+    const entry = state.undoStack.pop();
+    const data = await api('/api/restore', { method:'POST', body: JSON.stringify({ mode: state.session.mode, dataset_key: state.session.mode === 'browser-local' ? state.session.dataset_id : state.session.raw_dir, group_name: entry.group_name, record: entry.record, group_index: entry.group_index, effect_index: entry.effect_index }) });
+    state.session = data;
+    state.groupIndex = Math.min(entry.group_index, Math.max(data.groups.length-1, 0));
+    state.effectIndex = entry.effect_index;
+    $('undoBtn').disabled = state.undoStack.length === 0;
+    renderAll(); toast('已撤销', 'info');
+  } finally { state.busyAction = false; }
 }
 async function mark(label){
   const g = currentGroup(); const e = currentEffect(); if(!g || !e) return;
-  pushUndo(g);
-  const data = await api('/api/mark', { method:'POST', body: JSON.stringify({ mode: state.session.mode, dataset_key: state.session.mode === 'browser-local' ? state.session.dataset_id : state.session.raw_dir, group_name:g.name, effect_index:state.effectIndex, label, group_index:state.groupIndex }) });
-  state.session = data; renderAll();
-  toast(label==='qualified' ? '已标记为合格' : '已标记为不合格', label==='qualified' ? 'good' : 'bad');
+  if(state.busyAction) return; state.busyAction = true;
+  try{
+    pushUndo(g);
+    const data = await api('/api/mark', { method:'POST', body: JSON.stringify({ mode: state.session.mode, dataset_key: state.session.mode === 'browser-local' ? state.session.dataset_id : state.session.raw_dir, group_name:g.name, effect_index:state.effectIndex, label, group_index:state.groupIndex }) });
+    state.session = data; renderAll();
+    toast(label==='qualified' ? '已标记为合格' : '已标记为不合格', label==='qualified' ? 'good' : 'bad');
+  } finally { state.busyAction = false; }
 }
 async function commitCurrentGroup(){
   const group = currentGroup();
@@ -1126,14 +1133,17 @@ async function reloadSession(){
 }
 async function setGroupTo(idx){
   if(!state.session) return;
-  await commitCurrentGroup();
-  state.groupIndex = Math.max(0, Math.min(state.session.groups.length-1, idx));
-  state.effectIndex = 0; resetZoom(); await persistView();
-  await reloadSession(); renderAll();
+  if(state.busyAction) return; state.busyAction = true;
+  try{
+    await commitCurrentGroup();
+    state.groupIndex = Math.max(0, Math.min(state.session.groups.length-1, idx));
+    state.effectIndex = 0; resetZoom(); await persistView();
+    await reloadSession(); renderAll();
+  } finally { state.busyAction = false; }
 }
 async function goGroup(delta){ if(!state.session) return; await setGroupTo(state.groupIndex + delta); }
 async function goNextTodo(){
-  if(!state.session) return;
+  if(!state.session || state.busyAction) return;
   const n = state.session.groups.length;
   for(let off=1; off<=n; off++){
     const i = (state.groupIndex + off) % n;
