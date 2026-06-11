@@ -1038,7 +1038,7 @@ function paintDiff(){
   }
   ctx.putImageData(out, 0, 0);
   const pct = ((diffPixels/(w*h))*100).toFixed(2);
-  $('diffStage').querySelector('.side-tag.l').textContent = `差异 ${pct}%`;
+  $('diffStage').querySelector('.side-tag.l').textContent = `红色=差异 · ${pct}%`;
 }
 function renderAll(){ renderStats(); renderGroupTitle(); renderGroupNav(); renderThumbs(); renderCompare(); }
 
@@ -1328,7 +1328,8 @@ $('undoBtn').onclick = ()=>undo().catch(err=>toast(err.message,'bad'));
 $('modeSliderSeg').onclick = ()=>setCompareMode('slider');
 $('modeSideSeg').onclick = ()=>setCompareMode('side');
 $('modeDiffSeg').onclick = ()=>setCompareMode('diff');
-$('diffThreshold').oninput = (e)=>{ state.diffThreshold = Number(e.target.value); if(state.compareMode==='diff') paintDiff(); };
+let diffPaintTimer = null;
+$('diffThreshold').oninput = (e)=>{ state.diffThreshold = Number(e.target.value); if(state.compareMode==='diff'){ clearTimeout(diffPaintTimer); diffPaintTimer = setTimeout(paintDiff, 90); } };
 $('loupeBtn').onclick = ()=>setLoupe(!state.loupe);
 $('zoomInBtn').onclick = ()=>{ state.zoom.scale = Math.min(8, state.zoom.scale*1.25); applyZoom(); };
 $('zoomOutBtn').onclick = ()=>{ state.zoom.scale = Math.max(1, state.zoom.scale/1.25); if(state.zoom.scale===1){ state.zoom.x=0; state.zoom.y=0; } applyZoom(); };
@@ -1399,6 +1400,9 @@ class Handler(BaseHTTPRequestHandler):
             qs = parse_qs(parsed.query)
             path_value = qs.get("path", [""])[0]
             path = Path(unquote(path_value))
+            if not self.server.app.is_allowed_file(path):
+                return self._json({"error": "forbidden: path is outside the loaded dataset directories"}, 403)
+            path = path.resolve()
             if not path.exists() or not path.is_file():
                 return self._json({"error": "file not found"}, 404)
             ctype = mimetypes.guess_type(str(path))[0] or "application/octet-stream"
@@ -1423,6 +1427,7 @@ class Handler(BaseHTTPRequestHandler):
                     return self._json(session)
                 session = build_path_session(data["raw_dir"], data.get("effect_dirs", []))
                 self.server.app.save_recent_path(session["raw_dir"], session["effect_dirs"])
+                self.server.app.add_allowed_roots([session["raw_dir"], *session["effect_dirs"]])
                 return self._json(session)
             if parsed.path == "/api/reload":
                 mode = data.get("mode", "server-path")
@@ -1437,7 +1442,9 @@ class Handler(BaseHTTPRequestHandler):
                         "effect_dirs": meta.get("effect_dirs_payload", []),
                         "imported_annotation": ann,
                     }))
-                return self._json(build_path_session(data["raw_dir"], data.get("effect_dirs", [])))
+                session = build_path_session(data["raw_dir"], data.get("effect_dirs", []))
+                self.server.app.add_allowed_roots([session["raw_dir"], *session["effect_dirs"]])
+                return self._json(session)
             if parsed.path == "/api/sort_files":
                 mode = data.get("mode", "server-path")
                 if mode != "server-path":
@@ -1526,6 +1533,31 @@ class App:
     def __init__(self, root: Path):
         self.root = root
         self.state_path = root / APP_STATE_FILE
+        self.allowed_roots = set()
+
+    def add_allowed_roots(self, dirs):
+        for d in dirs:
+            if not d:
+                continue
+            try:
+                self.allowed_roots.add(Path(d).resolve())
+            except Exception:
+                pass
+
+    def is_allowed_file(self, path: Path) -> bool:
+        try:
+            rp = path.resolve()
+        except Exception:
+            return False
+        if rp.suffix.lower() not in IMAGE_EXTS:
+            return False
+        for root in self.allowed_roots:
+            try:
+                rp.relative_to(root)
+                return True
+            except ValueError:
+                continue
+        return False
 
     def load_recent(self):
         if self.state_path.exists():
